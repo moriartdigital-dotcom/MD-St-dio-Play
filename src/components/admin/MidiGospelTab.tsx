@@ -338,7 +338,7 @@ export const MidiGospelTab: React.FC = () => {
         <div className="bg-[#111216] border border-white/[0.08] rounded-2xl p-4 sm:p-6 space-y-4">
           <div className="flex items-center gap-2 text-yellow-400 font-bold text-sm border-b border-white/[0.08] pb-3">
             <Volume2 className="w-4 h-4" />
-            <span>4. Demonstração de Áudio (Player com Borda Dourada)</span>
+            <span>4. Demonstração de Áudio (Player Dourado Ouro — Gospel)</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -350,7 +350,7 @@ export const MidiGospelTab: React.FC = () => {
                 type="text"
                 value={formData.audioPreviewTitle}
                 onChange={(e) => setFormData({ ...formData, audioPreviewTitle: e.target.value })}
-                placeholder="DEMONSTRAÇÃO DE ÁUDIO — MIDI PREVIEW"
+                placeholder="DEMONSTRAÇÃO DE ÁUDIO — MIDI GOSPEL"
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-yellow-400"
               />
             </div>
@@ -365,7 +365,7 @@ export const MidiGospelTab: React.FC = () => {
                 onChange={(e) =>
                   setFormData({ ...formData, audioPreviewSubtitle: e.target.value })
                 }
-                placeholder="Clique para ouvir uma amostra dos MIDI"
+                placeholder="Clique para ouvir uma amostra dos louvores e adoração"
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-yellow-400"
               />
             </div>

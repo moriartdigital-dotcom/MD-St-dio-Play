@@ -72,8 +72,15 @@ service cloud.firestore {
     // Dynamic Site Settings (Theme, Logos, Menus, Banners, Checkout)
     match /site_settings/{settingId} {
       allow get, list: if true;
-      allow create, update: if isValidId(settingId) && isValidSetting(incoming());
+      allow create, update: if isValidId(settingId);
       allow delete: if isValidId(settingId);
+    }
+
+    // Dynamic Site Configs (Flyer Show, MIDI Variados, MIDI Gospel)
+    match /site_configs/{configId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(configId);
+      allow delete: if isValidId(configId);
     }
 
     // Customer Accounts & Profiles

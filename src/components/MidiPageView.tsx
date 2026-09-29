@@ -24,22 +24,40 @@ export const MidiPageView: React.FC<MidiPageViewProps> = ({
   const { midiVariadosConfig, midiGospelConfig } = useStore();
   const config = type === 'variados' ? midiVariadosConfig : midiGospelConfig;
 
-  // Local audio preview playback
+  // Local audio preview playback with strict isolation between categories
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Stop and clean up audio immediately when switching between Variados and Gospel or changing audio URL
   useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      audioRef.current = null;
+    }
+    setIsPlayingAudio(false);
+
     return () => {
       if (audioRef.current) {
         audioRef.current.pause();
+        audioRef.current.src = '';
+        audioRef.current = null;
       }
+      setIsPlayingAudio(false);
     };
-  }, []);
+  }, [type, config.audioPreviewUrl]);
 
   const handleToggleAudio = () => {
-    if (!audioRef.current) {
-      audioRef.current = new Audio(config.audioPreviewUrl);
+    const audioUrl = config.audioPreviewUrl?.trim();
+    if (!audioUrl) return;
+
+    if (!audioRef.current || audioRef.current.src !== audioUrl) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      audioRef.current = new Audio(audioUrl);
       audioRef.current.onended = () => setIsPlayingAudio(false);
+      audioRef.current.onerror = () => setIsPlayingAudio(false);
     }
 
     if (isPlayingAudio) {
@@ -53,7 +71,7 @@ export const MidiPageView: React.FC<MidiPageViewProps> = ({
         })
         .catch((e) => {
           console.warn('Audio play notice:', e);
-          setIsPlayingAudio(true);
+          setIsPlayingAudio(false);
         });
     }
   };
@@ -209,29 +227,60 @@ export const MidiPageView: React.FC<MidiPageViewProps> = ({
 
             {/* Audio Preview Box with matching Border */}
             <div
-              className={`w-full max-w-xl mx-auto p-3.5 sm:p-4 rounded-2xl bg-black ${themeBorder} flex items-center gap-4 sm:gap-6 ${audioShadow} hover:bg-white/[0.02] transition-all`}
+              className={`w-full max-w-xl mx-auto p-4 sm:p-5 rounded-2xl bg-black ${themeBorder} flex items-center gap-4 sm:gap-6 ${audioShadow} hover:bg-white/[0.02] transition-all relative overflow-hidden`}
             >
-              {/* Cyan Circular Play/Pause Button with intense cyan glow */}
+              {/* Subtle background ambient gradient specific to each category */}
+              <div
+                className={`absolute inset-0 pointer-events-none opacity-15 ${
+                  isGospel
+                    ? 'bg-gradient-to-r from-yellow-500/30 via-amber-500/10 to-transparent'
+                    : 'bg-gradient-to-r from-cyan-500/30 via-blue-500/10 to-transparent'
+                }`}
+              />
+
+              {/* Distinct Circular Play/Pause Button */}
               <button
                 type="button"
                 onClick={handleToggleAudio}
-                title={isPlayingAudio ? 'Pausar Áudio' : 'Ouvir Demonstração'}
-                className="w-14 h-14 rounded-full bg-[#00e5ff] hover:bg-[#00cdeb] text-black flex items-center justify-center shrink-0 shadow-[0_0_22px_rgba(0,229,255,0.75)] cursor-pointer active:scale-95 transition-all"
+                title={isPlayingAudio ? 'Pausar Demonstração' : 'Ouvir Demonstração'}
+                className={`relative z-10 w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-all ${
+                  isGospel
+                    ? 'bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-300 text-black shadow-[0_0_28px_rgba(250,204,21,0.85)] hover:shadow-[0_0_38px_rgba(250,204,21,1)] border-2 border-yellow-200/60'
+                    : 'bg-gradient-to-tr from-cyan-500 via-[#00e5ff] to-cyan-300 text-black shadow-[0_0_28px_rgba(0,229,255,0.85)] hover:shadow-[0_0_38px_rgba(0,229,255,1)] border-2 border-cyan-200/60'
+                }`}
               >
                 {isPlayingAudio ? (
-                  <Pause className="w-6 h-6 fill-black" />
+                  <Pause className="w-6 h-6 sm:w-7 sm:h-7 fill-black" />
                 ) : (
-                  <Play className="w-6 h-6 fill-black ml-1" />
+                  <Play className="w-6 h-6 sm:w-7 sm:h-7 fill-black ml-1" />
                 )}
               </button>
 
-              <div className="min-w-0 flex-1 text-center">
-                <span className="font-black text-white text-xs sm:text-sm md:text-base tracking-wide block uppercase">
-                  {config.audioPreviewTitle || 'DEMONSTRAÇÃO DE ÁUDIO — MIDI PREVIEW'}
+              <div className="relative z-10 min-w-0 flex-1 text-center">
+                <div className="flex items-center justify-center gap-2">
+                  <span
+                    className={`font-black text-xs sm:text-sm md:text-base tracking-wide uppercase ${
+                      isGospel ? 'text-yellow-400' : 'text-cyan-400'
+                    }`}
+                  >
+                    {config.audioPreviewTitle || (isGospel ? 'DEMONSTRAÇÃO DE ÁUDIO — MIDI GOSPEL' : 'DEMONSTRAÇÃO DE ÁUDIO — MIDI VARIADOS')}
+                  </span>
+                  {isPlayingAudio && (
+                    <span className="flex items-center gap-0.5">
+                      <span className={`w-1 h-3 rounded-full animate-bounce ${isGospel ? 'bg-yellow-400' : 'bg-cyan-400'}`} style={{ animationDelay: '0ms' }} />
+                      <span className={`w-1 h-4 rounded-full animate-bounce ${isGospel ? 'bg-yellow-400' : 'bg-cyan-400'}`} style={{ animationDelay: '150ms' }} />
+                      <span className={`w-1 h-2 rounded-full animate-bounce ${isGospel ? 'bg-yellow-400' : 'bg-cyan-400'}`} style={{ animationDelay: '300ms' }} />
+                    </span>
+                  )}
+                </div>
+                <span className="text-xs sm:text-sm text-neutral-300 font-medium block mt-1">
+                  {config.audioPreviewSubtitle || (isGospel ? 'Clique para ouvir uma amostra dos MIDI Gospel' : 'Clique para ouvir uma amostra dos ritmos variados')}
                 </span>
-                <span className="text-xs sm:text-sm text-white font-bold block mt-1">
-                  {config.audioPreviewSubtitle || 'Clique para ouvir uma amostra dos MIDI'}
-                </span>
+                {isPlayingAudio && (
+                  <span className={`text-[10px] font-bold tracking-wider uppercase block mt-1 ${isGospel ? 'text-yellow-400' : 'text-cyan-400'}`}>
+                    ▶ Reproduzindo Áudio {isGospel ? 'Gospel' : 'Variados'}
+                  </span>
+                )}
               </div>
             </div>
 

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { PlaybackPack, Track, FlyerShowConfig, FlyerItem, MidiPageConfig } from '../types';
 import { ALL_PACKS } from '../data/packs';
 import {
@@ -29,7 +29,7 @@ import {
   handleFirestoreError,
   OperationType,
 } from '../firebase';
-import { doc, setDoc, getDocs, collection, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, getDocs, collection, deleteDoc, onSnapshot } from 'firebase/firestore';
 
 interface StoreContextType {
   // Navigation / Mode
@@ -304,8 +304,8 @@ export const DEFAULT_MIDI_VARIADOS: MidiPageConfig = {
   priceSubtext: '/ pix ou cartão',
   showPrice: false,
   buttonText: 'ADQUIRA A COLETÂNEA COMPLETA',
-  audioPreviewTitle: 'DEMONSTRAÇÃO DE ÁUDIO — MIDI PREVIEW',
-  audioPreviewSubtitle: 'Clique para ouvir uma amostra dos MIDI',
+  audioPreviewTitle: 'DEMONSTRAÇÃO DE ÁUDIO — MIDI VARIADOS',
+  audioPreviewSubtitle: 'Clique para ouvir uma amostra dos ritmos variados',
   audioPreviewUrl: 'https://cdn.freesound.org/previews/250/250856_4486188-lq.mp3',
   postSaleUrl: 'https://drive.google.com/drive/folders/mega-pack-midi-variados',
   tracklistUrl: '',
@@ -334,8 +334,8 @@ export const DEFAULT_MIDI_GOSPEL: MidiPageConfig = {
   priceSubtext: '/ pix ou cartão',
   showPrice: false,
   buttonText: 'ADQUIRA A COLETÂNEA COMPLETA',
-  audioPreviewTitle: 'DEMONSTRAÇÃO DE ÁUDIO — MIDI PREVIEW',
-  audioPreviewSubtitle: 'Clique para ouvir uma amostra dos MIDI',
+  audioPreviewTitle: 'DEMONSTRAÇÃO DE ÁUDIO — MIDI GOSPEL',
+  audioPreviewSubtitle: 'Clique para ouvir uma amostra dos louvores e adoração',
   audioPreviewUrl: 'https://cdn.freesound.org/previews/464/464902_9961300-lq.mp3',
   postSaleUrl: 'https://drive.google.com/drive/folders/mega-pack-midi-gospel',
   tracklistUrl: '',
@@ -665,7 +665,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return saved ? JSON.parse(saved) : INITIAL_DEMO_ORDERS;
   });
 
-  // On initial mount, test connection & sync latest from Firestore
+  // Ref to prevent echo loops when Firestore pushes incoming remote updates
+  const isIncomingSyncRef = useRef<{ [key: string]: boolean }>({});
+
+  // On initial mount: test connection, setup real-time onSnapshot listeners across all collections
   useEffect(() => {
     testFirestoreConnection().then((res) => {
       if (res.success) {
@@ -677,12 +680,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     });
 
-    const syncLiveFirestore = async () => {
-      try {
-        const packsSnap = await getDocs(collection(db, 'playback_packs'));
-        if (!packsSnap.empty) {
+    // 1. REAL-TIME LISTENER: Playback Packs Catalog
+    const unsubPacks = onSnapshot(
+      collection(db, 'playback_packs'),
+      (snapshot) => {
+        if (!snapshot.empty) {
           const livePacks: PlaybackPack[] = [];
-          packsSnap.forEach((docSnap) => {
+          snapshot.forEach((docSnap) => {
             const data = docSnap.data();
             if (!data.deleted) {
               livePacks.push(data as PlaybackPack);
@@ -690,58 +694,166 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           });
           if (livePacks.length > 0) {
             livePacks.sort((a, b) => (a.orderIndex ?? 999) - (b.orderIndex ?? 999));
+            isIncomingSyncRef.current['packs'] = true;
             setPacks(livePacks);
             localStorage.setItem('jsp_packs', JSON.stringify(livePacks));
           }
         }
+      },
+      (err) => {
+        console.warn('Real-time packs subscription notice:', err);
+      }
+    );
 
-        const settingsSnap = await getDocs(collection(db, 'site_settings'));
-        if (!settingsSnap.empty) {
-          settingsSnap.forEach((docSnap) => {
+    // 2. REAL-TIME LISTENER: Site Settings (Theme, Banner, Logo, Menu, Footer, Cart, Checkout)
+    const unsubSettings = onSnapshot(
+      collection(db, 'site_settings'),
+      (snapshot) => {
+        if (!snapshot.empty) {
+          snapshot.forEach((docSnap) => {
             const data = docSnap.data();
             const config = data.config || data;
-            if (docSnap.id === 'theme' && config.primaryColor) {
+            const id = docSnap.id;
+            isIncomingSyncRef.current[id] = true;
+
+            if (id === 'theme' && config.primaryColor) {
               setThemeConfig(config);
               localStorage.setItem('jsp_theme', JSON.stringify(config));
-            } else if (docSnap.id === 'banner' && config.text !== undefined) {
+            } else if (id === 'banner' && config.text !== undefined) {
               setBannerConfig(config);
               localStorage.setItem('jsp_banner', JSON.stringify(config));
-            } else if (docSnap.id === 'logo' && config.brandName) {
+            } else if (id === 'logo' && config.brandName) {
               setLogoConfig(config);
               localStorage.setItem('jsp_logo', JSON.stringify(config));
-            } else if (docSnap.id === 'menu' && Array.isArray(config.items)) {
+            } else if (id === 'menu' && Array.isArray(config.items)) {
               setMenuConfig(config);
               localStorage.setItem('jsp_menu', JSON.stringify(config));
-            } else if (docSnap.id === 'footer' && config.companyName) {
+            } else if (id === 'footer' && config.companyName) {
               setFooterConfig(config);
               localStorage.setItem('jsp_footer', JSON.stringify(config));
-            } else if (docSnap.id === 'cart' && Array.isArray(config.coupons)) {
+            } else if (id === 'cart' && Array.isArray(config.coupons)) {
               setCartConfig(config);
               localStorage.setItem('jsp_cart', JSON.stringify(config));
-            } else if (docSnap.id === 'checkout' && config.pixKey) {
+            } else if (id === 'checkout' && config.pixKey) {
               setCheckoutConfig(config);
               localStorage.setItem('jsp_checkout', JSON.stringify(config));
-            } else if (docSnap.id === 'flyer_show' && config.title) {
+            } else if (id === 'flyer_show' && config.title) {
               setFlyerShowConfig(config);
               localStorage.setItem('jsp_flyer_show', JSON.stringify(config));
-            } else if (docSnap.id === 'midi_variados' && config.title) {
+            } else if (id === 'midi_variados' && config.title) {
               setMidiVariadosConfig(config);
               localStorage.setItem('jsp_midi_variados', JSON.stringify(config));
-            } else if (docSnap.id === 'midi_gospel' && config.title) {
+            } else if (id === 'midi_gospel' && config.title) {
               setMidiGospelConfig(config);
               localStorage.setItem('jsp_midi_gospel', JSON.stringify(config));
             }
           });
         }
-      } catch (e) {
-        console.warn('Firestore live sync note:', e);
+      },
+      (err) => {
+        console.warn('Real-time settings subscription notice:', err);
       }
+    );
+
+    // 3. REAL-TIME LISTENER: Site Configs (Flyer Show, MIDI Variados, MIDI Gospel)
+    const unsubConfigs = onSnapshot(
+      collection(db, 'site_configs'),
+      (snapshot) => {
+        if (!snapshot.empty) {
+          snapshot.forEach((docSnap) => {
+            const config = docSnap.data();
+            const id = docSnap.id;
+            isIncomingSyncRef.current[id] = true;
+
+            if (id === 'flyer_show' && config.title) {
+              setFlyerShowConfig(config as FlyerShowConfig);
+              localStorage.setItem('jsp_flyer_show', JSON.stringify(config));
+            } else if (id === 'midi_variados' && config.title) {
+              setMidiVariadosConfig(config as MidiPageConfig);
+              localStorage.setItem('jsp_midi_variados', JSON.stringify(config));
+            } else if (id === 'midi_gospel' && config.title) {
+              setMidiGospelConfig(config as MidiPageConfig);
+              localStorage.setItem('jsp_midi_gospel', JSON.stringify(config));
+            }
+          });
+        }
+      },
+      (err) => {
+        console.warn('Real-time configs subscription notice:', err);
+      }
+    );
+
+    // 4. REAL-TIME LISTENER: Orders
+    const unsubOrders = onSnapshot(
+      collection(db, 'orders'),
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const liveOrders: Order[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            if (!data.deleted) {
+              liveOrders.push(data as Order);
+            }
+          });
+          if (liveOrders.length > 0) {
+            liveOrders.sort(
+              (a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime()
+            );
+            isIncomingSyncRef.current['orders'] = true;
+            setOrders(liveOrders);
+            localStorage.setItem('jsp_orders', JSON.stringify(liveOrders));
+          }
+        }
+      },
+      (err) => {
+        console.warn('Real-time orders subscription notice:', err);
+      }
+    );
+
+    // 5. Cross-tab real-time sync for multiple tabs open in the same browser
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (!e.newValue) return;
+      try {
+        if (e.key === 'jsp_packs') {
+          setPacks(JSON.parse(e.newValue));
+        } else if (e.key === 'jsp_theme') {
+          setThemeConfig(JSON.parse(e.newValue));
+        } else if (e.key === 'jsp_banner') {
+          setBannerConfig(JSON.parse(e.newValue));
+        } else if (e.key === 'jsp_logo') {
+          setLogoConfig(JSON.parse(e.newValue));
+        } else if (e.key === 'jsp_menu') {
+          setMenuConfig(JSON.parse(e.newValue));
+        } else if (e.key === 'jsp_footer') {
+          setFooterConfig(JSON.parse(e.newValue));
+        } else if (e.key === 'jsp_cart') {
+          setCartConfig(JSON.parse(e.newValue));
+        } else if (e.key === 'jsp_checkout') {
+          setCheckoutConfig(JSON.parse(e.newValue));
+        } else if (e.key === 'jsp_flyer_show') {
+          setFlyerShowConfig(JSON.parse(e.newValue));
+        } else if (e.key === 'jsp_midi_variados') {
+          setMidiVariadosConfig(JSON.parse(e.newValue));
+        } else if (e.key === 'jsp_midi_gospel') {
+          setMidiGospelConfig(JSON.parse(e.newValue));
+        } else if (e.key === 'jsp_orders') {
+          setOrders(JSON.parse(e.newValue));
+        }
+      } catch {}
     };
 
-    syncLiveFirestore();
+    window.addEventListener('storage', handleStorageEvent);
+
+    return () => {
+      unsubPacks();
+      unsubSettings();
+      unsubConfigs();
+      unsubOrders();
+      window.removeEventListener('storage', handleStorageEvent);
+    };
   }, []);
 
-  // Auto-sync with localStorage
+  // Auto-sync with localStorage & auto-push to Firestore for multi-browser real-time propagation
   useEffect(() => {
     localStorage.setItem('jsp_is_admin', isAdminMode ? 'true' : 'false');
   }, [isAdminMode]);
@@ -756,30 +868,122 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     document.documentElement.style.setProperty('--color-primary', themeConfig.primaryColor);
     document.documentElement.style.setProperty('--color-secondary', themeConfig.secondaryColor);
     document.documentElement.style.setProperty('--color-background', themeConfig.backgroundColor);
+
+    if (isIncomingSyncRef.current['theme']) {
+      isIncomingSyncRef.current['theme'] = false;
+      return;
+    }
+    setDoc(
+      doc(db, 'site_settings', 'theme'),
+      {
+        key: 'theme',
+        config: themeConfig,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    ).catch(() => {});
   }, [themeConfig]);
 
   useEffect(() => {
     localStorage.setItem('jsp_banner', JSON.stringify(bannerConfig));
+    if (isIncomingSyncRef.current['banner']) {
+      isIncomingSyncRef.current['banner'] = false;
+      return;
+    }
+    setDoc(
+      doc(db, 'site_settings', 'banner'),
+      {
+        key: 'banner',
+        config: bannerConfig,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    ).catch(() => {});
   }, [bannerConfig]);
 
   useEffect(() => {
     localStorage.setItem('jsp_logo', JSON.stringify(logoConfig));
+    if (isIncomingSyncRef.current['logo']) {
+      isIncomingSyncRef.current['logo'] = false;
+      return;
+    }
+    setDoc(
+      doc(db, 'site_settings', 'logo'),
+      {
+        key: 'logo',
+        config: logoConfig,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    ).catch(() => {});
   }, [logoConfig]);
 
   useEffect(() => {
     localStorage.setItem('jsp_menu', JSON.stringify(menuConfig));
+    if (isIncomingSyncRef.current['menu']) {
+      isIncomingSyncRef.current['menu'] = false;
+      return;
+    }
+    setDoc(
+      doc(db, 'site_settings', 'menu'),
+      {
+        key: 'menu',
+        config: menuConfig,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    ).catch(() => {});
   }, [menuConfig]);
 
   useEffect(() => {
     localStorage.setItem('jsp_footer', JSON.stringify(footerConfig));
+    if (isIncomingSyncRef.current['footer']) {
+      isIncomingSyncRef.current['footer'] = false;
+      return;
+    }
+    setDoc(
+      doc(db, 'site_settings', 'footer'),
+      {
+        key: 'footer',
+        config: footerConfig,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    ).catch(() => {});
   }, [footerConfig]);
 
   useEffect(() => {
     localStorage.setItem('jsp_cart', JSON.stringify(cartConfig));
+    if (isIncomingSyncRef.current['cart']) {
+      isIncomingSyncRef.current['cart'] = false;
+      return;
+    }
+    setDoc(
+      doc(db, 'site_settings', 'cart'),
+      {
+        key: 'cart',
+        config: cartConfig,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    ).catch(() => {});
   }, [cartConfig]);
 
   useEffect(() => {
     localStorage.setItem('jsp_checkout', JSON.stringify(checkoutConfig));
+    if (isIncomingSyncRef.current['checkout']) {
+      isIncomingSyncRef.current['checkout'] = false;
+      return;
+    }
+    setDoc(
+      doc(db, 'site_settings', 'checkout'),
+      {
+        key: 'checkout',
+        config: checkoutConfig,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    ).catch(() => {});
   }, [checkoutConfig]);
 
   useEffect(() => {
@@ -792,18 +996,45 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   useEffect(() => {
     localStorage.setItem('jsp_flyer_show', JSON.stringify(flyerShowConfig));
+    if (isIncomingSyncRef.current['flyer_show']) {
+      isIncomingSyncRef.current['flyer_show'] = false;
+      return;
+    }
     setDoc(doc(db, 'site_configs', 'flyer_show'), flyerShowConfig, { merge: true }).catch(() => {});
+    setDoc(
+      doc(db, 'site_settings', 'flyer_show'),
+      { key: 'flyer_show', config: flyerShowConfig },
+      { merge: true }
+    ).catch(() => {});
   }, [flyerShowConfig]);
 
   useEffect(() => {
     localStorage.setItem('jsp_midi_variados', JSON.stringify(midiVariadosConfig));
+    if (isIncomingSyncRef.current['midi_variados']) {
+      isIncomingSyncRef.current['midi_variados'] = false;
+      return;
+    }
     setDoc(doc(db, 'site_configs', 'midi_variados'), midiVariadosConfig, { merge: true }).catch(() => {});
+    setDoc(
+      doc(db, 'site_settings', 'midi_variados'),
+      { key: 'midi_variados', config: midiVariadosConfig },
+      { merge: true }
+    ).catch(() => {});
   }, [midiVariadosConfig]);
 
   useEffect(() => {
     localStorage.setItem('jsp_midi_gospel', JSON.stringify(midiGospelConfig));
     localStorage.setItem('jsp_midi_gospel_v4', JSON.stringify(midiGospelConfig));
+    if (isIncomingSyncRef.current['midi_gospel']) {
+      isIncomingSyncRef.current['midi_gospel'] = false;
+      return;
+    }
     setDoc(doc(db, 'site_configs', 'midi_gospel'), midiGospelConfig, { merge: true }).catch(() => {});
+    setDoc(
+      doc(db, 'site_settings', 'midi_gospel'),
+      { key: 'midi_gospel', config: midiGospelConfig },
+      { merge: true }
+    ).catch(() => {});
   }, [midiGospelConfig]);
 
   // Pack CRUD functions
