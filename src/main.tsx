@@ -28,7 +28,18 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 
   handleReset = () => {
-    localStorage.clear();
+    try {
+      localStorage.removeItem('jsp_orders');
+      localStorage.removeItem('jsp_packs');
+    } catch {}
+    window.location.reload();
+  };
+
+  handleResetStore = () => {
+    try {
+      localStorage.setItem('jsp_is_admin', 'false');
+    } catch {}
+    this.setState({ hasError: false, error: undefined });
     window.location.reload();
   };
 
@@ -38,14 +49,22 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
         <div className="min-h-screen bg-[#0b0c0e] text-white flex flex-col items-center justify-center p-6 text-center">
           <h2 className="text-2xl font-black mb-2 text-amber-400">MD Stúdio Play</h2>
           <p className="text-neutral-400 text-sm mb-6 max-w-md">
-            Ocorreu uma pequena instabilidade ao carregar o catálogo. Clique no botão abaixo para restaurar e recarregar a loja.
+            Ocorreu uma pequena instabilidade ao carregar os dados. Clique no botão abaixo para restaurar e recarregar.
           </p>
-          <button
-            onClick={this.handleReset}
-            className="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-extrabold rounded-full transition-all cursor-pointer shadow-lg shadow-amber-500/20"
-          >
-            Recarregar Loja Completa
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={this.handleReset}
+              className="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-extrabold rounded-full transition-all cursor-pointer shadow-lg shadow-amber-500/20 active:scale-95 text-xs sm:text-sm"
+            >
+              Recarregar e Restaurar
+            </button>
+            <button
+              onClick={this.handleResetStore}
+              className="px-6 py-2.5 bg-white/10 hover:bg-white/20 text-white font-bold rounded-full transition-all cursor-pointer border border-white/10 active:scale-95 text-xs sm:text-sm"
+            >
+              Voltar para a Loja
+            </button>
+          </div>
         </div>
       );
     }

@@ -19,20 +19,24 @@ interface DashboardTabProps {
 }
 
 export const DashboardTab: React.FC<DashboardTabProps> = ({ onNavigateToTab }) => {
-  const { packs, orders, checkoutConfig, firebaseConfig } = useStore();
+  const { packs = [], orders = [], checkoutConfig, firebaseConfig } = useStore();
 
-  const totalRevenue = orders
-    .filter((o) => o.status === 'completed')
-    .reduce((acc, o) => acc + o.total, 0);
+  const safeOrders = Array.isArray(orders) ? orders : [];
+  const safePacks = Array.isArray(packs) ? packs : [];
 
-  const totalTracks = packs.reduce((acc, p) => acc + p.tracks.length, 0);
+  const totalRevenue = safeOrders
+    .filter((o) => o?.status === 'completed')
+    .reduce((acc, o) => acc + (Number(o?.total) || 0), 0);
 
-  const pixOrdersCount = orders.filter((o) => o.paymentMethod === 'pix').length;
-  const cardOrdersCount = orders.filter((o) => o.paymentMethod === 'card').length;
+  const totalTracks = safePacks.reduce((acc, p) => acc + (Array.isArray(p?.tracks) ? p.tracks.length : 0), 0);
+
+  const pixOrdersCount = safeOrders.filter((o) => o?.paymentMethod === 'pix').length;
+  const cardOrdersCount = safeOrders.filter((o) => o?.paymentMethod === 'card').length;
 
   // Breakdown by genre
-  const genreCount = packs.reduce((acc: Record<string, number>, pack) => {
-    acc[pack.genre] = (acc[pack.genre] || 0) + 1;
+  const genreCount = safePacks.reduce((acc: Record<string, number>, pack) => {
+    const g = pack?.genre || 'Geral';
+    acc[g] = (acc[g] || 0) + 1;
     return acc;
   }, {});
 
@@ -340,45 +344,48 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ onNavigateToTab }) =
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {orders.slice(0, 5).map((order) => (
-                <tr key={order.id} className="hover:bg-white/[0.02]">
-                  <td className="py-3 px-3 font-mono font-bold text-white">
-                    {order.orderNumber}
-                  </td>
-                  <td className="py-3 px-3">
-                    <div className="font-semibold text-white">{order.customerName}</div>
-                    <div className="text-[11px] text-neutral-500">{order.customerEmail}</div>
-                  </td>
-                  <td className="py-3 px-3">
-                    <span className="px-2 py-0.5 bg-white/5 rounded text-[11px]">
-                      {order.items.length} {order.items.length === 1 ? 'pacote' : 'pacotes'}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3">
-                    <span className="flex items-center gap-1.5 font-bold uppercase text-[11px]">
-                      {order.paymentMethod === 'pix' ? (
-                        <>
-                          <QrCode className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>PIX</span>
-                        </>
-                      ) : (
-                        <>
-                          <CreditCard className="w-3.5 h-3.5 text-blue-400" />
-                          <span>Cartão</span>
-                        </>
-                      )}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 font-bold text-emerald-400 tabular-nums">
-                    {formatBRL(order.total)}
-                  </td>
-                  <td className="py-3 px-3">
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-500/30">
-                      Concluído
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {safeOrders.slice(0, 5).map((order) => {
+                const itemsCount = Array.isArray(order?.items) ? order.items.length : 0;
+                return (
+                  <tr key={order?.id || Math.random()} className="hover:bg-white/[0.02]">
+                    <td className="py-3 px-3 font-mono font-bold text-white">
+                      {order?.orderNumber || order?.id || 'PED-000000'}
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="font-semibold text-white">{order?.customerName || 'Cliente'}</div>
+                      <div className="text-[11px] text-neutral-500">{order?.customerEmail || ''}</div>
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className="px-2 py-0.5 bg-white/5 rounded text-[11px]">
+                        {itemsCount} {itemsCount === 1 ? 'pacote' : 'pacotes'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className="flex items-center gap-1.5 font-bold uppercase text-[11px]">
+                        {order?.paymentMethod === 'pix' ? (
+                          <>
+                            <QrCode className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>PIX</span>
+                          </>
+                        ) : (
+                          <>
+                            <CreditCard className="w-3.5 h-3.5 text-blue-400" />
+                            <span>Cartão</span>
+                          </>
+                        )}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 font-bold text-emerald-400 tabular-nums">
+                      {formatBRL(Number(order?.total) || 0)}
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-500/30">
+                        {order?.status === 'completed' ? 'Concluído' : order?.status || 'Pendente'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

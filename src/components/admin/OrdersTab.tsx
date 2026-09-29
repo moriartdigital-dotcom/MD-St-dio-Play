@@ -34,13 +34,20 @@ export const OrdersTab: React.FC = () => {
     return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
 
-  const filteredOrders = orders.filter((order) => {
+  const safeOrders = Array.isArray(orders) ? orders : [];
+
+  const filteredOrders = safeOrders.filter((order) => {
+    if (!order) return false;
     const q = searchQuery.toLowerCase();
+    const orderNum = (order.orderNumber || order.id || '').toLowerCase();
+    const custName = (order.customerName || '').toLowerCase();
+    const custEmail = (order.customerEmail || '').toLowerCase();
+
     const matchesSearch =
       !q ||
-      order.orderNumber.toLowerCase().includes(q) ||
-      order.customerName.toLowerCase().includes(q) ||
-      order.customerEmail.toLowerCase().includes(q);
+      orderNum.includes(q) ||
+      custName.includes(q) ||
+      custEmail.includes(q);
 
     const matchesStatus =
       selectedStatus === 'all' || order.status === selectedStatus;
@@ -142,52 +149,57 @@ export const OrdersTab: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredOrders.map((order) => (
-                  <tr key={order.id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="py-3.5 px-4">
-                      <div className="font-mono font-bold text-white">
-                        {order.orderNumber}
-                      </div>
-                      <div className="text-[10px] text-neutral-500 font-mono">
-                        {order.date}
-                      </div>
-                    </td>
+                filteredOrders.map((order) => {
+                  const safeItems = Array.isArray(order?.items) ? order.items : [];
+                  const itemsSummary = safeItems.map((i) => i?.pack?.title || 'Pacote').join(', ') || 'Nenhum item';
+                  const itemsCount = safeItems.length;
 
-                    <td className="py-3.5 px-4">
-                      <div className="font-bold text-white">{order.customerName}</div>
-                      <div className="text-[11px] text-neutral-400">
-                        {order.customerEmail}
-                      </div>
-                    </td>
+                  return (
+                    <tr key={order?.id || Math.random()} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="py-3.5 px-4">
+                        <div className="font-mono font-bold text-white">
+                          {order?.orderNumber || order?.id || 'PED-000000'}
+                        </div>
+                        <div className="text-[10px] text-neutral-500 font-mono">
+                          {order?.date || ''}
+                        </div>
+                      </td>
 
-                    <td className="py-3.5 px-4 max-w-[220px]">
-                      <div className="line-clamp-1 font-semibold text-neutral-200">
-                        {order.items.map((i) => i.pack.title).join(', ')}
-                      </div>
-                      <div className="text-[10px] text-neutral-500">
-                        {order.items.length} {order.items.length === 1 ? 'pacote' : 'pacotes'}
-                      </div>
-                    </td>
+                      <td className="py-3.5 px-4">
+                        <div className="font-bold text-white">{order?.customerName || 'Cliente'}</div>
+                        <div className="text-[11px] text-neutral-400">
+                          {order?.customerEmail || ''}
+                        </div>
+                      </td>
 
-                    <td className="py-3.5 px-4">
-                      <span className="flex items-center gap-1.5 font-bold uppercase text-[11px]">
-                        {order.paymentMethod === 'pix' ? (
-                          <>
-                            <QrCode className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>PIX</span>
-                          </>
-                        ) : (
-                          <>
-                            <CreditCard className="w-3.5 h-3.5 text-blue-400" />
-                            <span>Cartão</span>
-                          </>
-                        )}
-                      </span>
-                    </td>
+                      <td className="py-3.5 px-4 max-w-[220px]">
+                        <div className="line-clamp-1 font-semibold text-neutral-200">
+                          {itemsSummary}
+                        </div>
+                        <div className="text-[10px] text-neutral-500">
+                          {itemsCount} {itemsCount === 1 ? 'pacote' : 'pacotes'}
+                        </div>
+                      </td>
 
-                    <td className="py-3.5 px-4 font-bold text-emerald-400 tabular-nums">
-                      {formatBRL(order.total)}
-                    </td>
+                      <td className="py-3.5 px-4">
+                        <span className="flex items-center gap-1.5 font-bold uppercase text-[11px]">
+                          {order?.paymentMethod === 'pix' ? (
+                            <>
+                              <QrCode className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>PIX</span>
+                            </>
+                          ) : (
+                            <>
+                              <CreditCard className="w-3.5 h-3.5 text-blue-400" />
+                              <span>Cartão</span>
+                            </>
+                          )}
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-4 font-bold text-emerald-400 tabular-nums">
+                        {formatBRL(Number(order?.total) || 0)}
+                      </td>
 
                     <td className="py-3.5 px-4">
                       {order.status === 'completed' ? (
@@ -227,8 +239,9 @@ export const OrdersTab: React.FC = () => {
                       </div>
                     </td>
                   </tr>
-                ))
-              )}
+                );
+              })
+            )}
             </tbody>
           </table>
         </div>
@@ -269,22 +282,25 @@ export const OrdersTab: React.FC = () => {
               {/* Items Purchased */}
               <div className="space-y-2">
                 <span className="font-bold text-white block">Pacotes Comprados:</span>
-                {viewingOrder.items.map((item) => (
-                  <div
-                    key={item.pack.id}
-                    className="p-2.5 rounded-lg bg-black/40 border border-white/5 flex items-center justify-between"
-                  >
-                    <div>
-                      <div className="font-bold text-white">{item.pack.title}</div>
-                      <div className="text-[10px] text-neutral-400">
-                        {item.pack.artist} · {item.pack.tracks.length} músicas
+                {(Array.isArray(viewingOrder.items) ? viewingOrder.items : []).map((item, idx) => {
+                  const packTracksCount = Array.isArray(item?.pack?.tracks) ? item.pack.tracks.length : 0;
+                  return (
+                    <div
+                      key={item?.pack?.id || idx}
+                      className="p-2.5 rounded-lg bg-black/40 border border-white/5 flex items-center justify-between"
+                    >
+                      <div>
+                        <div className="font-bold text-white">{item?.pack?.title || 'Pacote'}</div>
+                        <div className="text-[10px] text-neutral-400">
+                          {item?.pack?.artist || 'Artista'} · {packTracksCount} músicas
+                        </div>
                       </div>
+                      <span className="font-bold text-emerald-400">
+                        {formatBRL(Number(item?.pack?.discountPrice) || 0)}
+                      </span>
                     </div>
-                    <span className="font-bold text-emerald-400">
-                      {formatBRL(item.pack.discountPrice)}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Totals */}

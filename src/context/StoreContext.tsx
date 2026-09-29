@@ -467,7 +467,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => unsubscribe();
   }, [adminCredentials.email]);
 
-  // Packs State - complete authentic packs
+  // Packs State - complete authentic packs with guaranteed array tracks
   const [packs, setPacks] = useState<PlaybackPack[]>(() => {
     const saved = localStorage.getItem('jsp_packs');
     if (saved) {
@@ -476,7 +476,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (Array.isArray(parsed) && parsed.length > 0) {
           // If saved has the old dummy "Xote Sertanejo" pack, discard it!
           if (parsed[0]?.title !== 'Xote Sertanejo' && parsed[0]?.artist !== 'Vários Artistas') {
-            return parsed;
+            return parsed.map((p: any) => ({
+              ...p,
+              genre: p.genre || 'Geral',
+              genres: Array.isArray(p.genres) ? p.genres : [p.genre || 'Geral'],
+              tracks: Array.isArray(p.tracks) ? p.tracks : [],
+            }));
           }
         }
       } catch {
@@ -662,7 +667,36 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const [orders, setOrders] = useState<Order[]>(() => {
     const saved = localStorage.getItem('jsp_orders');
-    return saved ? JSON.parse(saved) : INITIAL_DEMO_ORDERS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.map((o: any) => ({
+            ...o,
+            orderNumber: o.orderNumber || o.id || 'PED-000000',
+            date: o.date || new Date().toISOString(),
+            customerName: o.customerName || 'Cliente',
+            customerEmail: o.customerEmail || '',
+            items: Array.isArray(o.items)
+              ? o.items.map((it: any) => ({
+                  ...it,
+                  pack: {
+                    ...it.pack,
+                    tracks: Array.isArray(it.pack?.tracks) ? it.pack.tracks : [],
+                  },
+                }))
+              : [],
+            total: Number(o.total) || 0,
+            subtotal: Number(o.subtotal) || Number(o.total) || 0,
+            status: o.status || 'pending',
+            paymentMethod: o.paymentMethod || 'pix',
+          }));
+        }
+      } catch {
+        return INITIAL_DEMO_ORDERS;
+      }
+    }
+    return INITIAL_DEMO_ORDERS;
   });
 
   // Ref to prevent echo loops when Firestore pushes incoming remote updates
@@ -689,7 +723,17 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           snapshot.forEach((docSnap) => {
             const data = docSnap.data();
             if (!data.deleted) {
-              livePacks.push(data as PlaybackPack);
+              livePacks.push({
+                ...data,
+                id: docSnap.id || data.id,
+                title: data.title || 'Playback Pack',
+                artist: data.artist || 'Artista',
+                genre: data.genre || 'Geral',
+                genres: Array.isArray(data.genres) ? data.genres : [data.genre || 'Geral'],
+                tracks: Array.isArray(data.tracks) ? data.tracks : [],
+                originalPrice: Number(data.originalPrice) || 0,
+                discountPrice: Number(data.discountPrice) || 0,
+              } as PlaybackPack);
             }
           });
           if (livePacks.length > 0) {
@@ -792,7 +836,27 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           snapshot.forEach((docSnap) => {
             const data = docSnap.data();
             if (!data.deleted) {
-              liveOrders.push(data as Order);
+              liveOrders.push({
+                ...data,
+                id: docSnap.id || data.id,
+                orderNumber: data.orderNumber || data.id || 'PED-000000',
+                date: data.date || new Date().toISOString(),
+                customerName: data.customerName || 'Cliente',
+                customerEmail: data.customerEmail || '',
+                items: Array.isArray(data.items)
+                  ? data.items.map((it: any) => ({
+                      ...it,
+                      pack: {
+                        ...it?.pack,
+                        tracks: Array.isArray(it?.pack?.tracks) ? it.pack.tracks : [],
+                      },
+                    }))
+                  : [],
+                total: Number(data.total) || 0,
+                subtotal: Number(data.subtotal) || Number(data.total) || 0,
+                status: data.status || 'pending',
+                paymentMethod: data.paymentMethod || 'pix',
+              } as Order);
             }
           });
           if (liveOrders.length > 0) {

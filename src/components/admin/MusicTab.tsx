@@ -942,7 +942,7 @@ export const MusicTab: React.FC = () => {
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-900/60 text-xs font-bold transition-colors cursor-pointer"
                       >
                         <ListMusic className="w-3.5 h-3.5" />
-                        <span>{pack.tracks.length} músicas (Ver lista)</span>
+                        <span>{Array.isArray(pack?.tracks) ? pack.tracks.length : 0} músicas (Ver lista)</span>
                       </button>
                     </td>
 
