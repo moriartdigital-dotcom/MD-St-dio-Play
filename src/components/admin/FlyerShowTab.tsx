@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { FlyerItem } from '../../types';
 import { DEFAULT_FLYER_SHOW } from '../../context/StoreContext';
+import { resolveFlyerImage } from '../FlyerShowPage';
 import {
   Image,
   Save,
@@ -223,13 +224,20 @@ export const FlyerShowTab: React.FC = () => {
               <label className="block text-xs font-semibold text-neutral-300 mb-1">
                 URL da Imagem de Capa do Mockup
               </label>
-              <input
-                type="text"
-                value={formData.coverImage}
-                onChange={(e) => setFormData({ ...formData, coverImage: e.target.value })}
-                placeholder="https://... ou caminho de imagem"
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-cyan-400"
-              />
+              <div className="flex gap-3 items-center">
+                <input
+                  type="text"
+                  value={formData.coverImage}
+                  onChange={(e) => setFormData({ ...formData, coverImage: e.target.value })}
+                  placeholder="https://... ou caminho de imagem"
+                  className="flex-1 bg-black/40 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-cyan-400"
+                />
+                <img
+                  src={resolveFlyerImage(formData.coverImage)}
+                  alt="Preview da Capa"
+                  className="w-10 h-10 object-cover rounded-lg border border-cyan-500/40 shrink-0"
+                />
+              </div>
               <p className="text-[10px] text-neutral-500 mt-1">
                 Mockup 3D ou arte mostrando os modelos de flyers inclusos.
               </p>
@@ -383,7 +391,7 @@ export const FlyerShowTab: React.FC = () => {
                 className="flex items-center gap-3 p-3 bg-black/40 border border-white/10 rounded-xl"
               >
                 <img
-                  src={flyer.imageUrl}
+                  src={resolveFlyerImage(flyer.imageUrl)}
                   alt={flyer.title}
                   className="w-12 h-16 object-cover rounded-lg shrink-0 border border-white/10"
                 />

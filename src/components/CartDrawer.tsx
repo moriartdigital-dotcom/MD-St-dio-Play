@@ -281,58 +281,57 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       '';
 
     try {
-      if (accessToken && accessToken.trim().length > 10 && !accessToken.includes('mock-token')) {
-        const response = await fetch('/api/mercadopago/create-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            amount: total,
-            paymentMethodType: 'credit_card',
-            description: `MD Studio Play - ${items.map((i) => i.pack.title).join(', ')}`.slice(0, 100),
-            payer: {
-              name: customerName.trim(),
-              email: customerEmail.trim(),
-              phone: customerPhone,
-              cpf: customerCpf.replace(/\D/g, ''),
-            },
-            card: {
-              cardNumber: cleanCard,
-              cardHolder: cardHolder.trim(),
-              cardExp: cardExp.trim(),
-              cvv: cleanCvvNum,
-              installments,
-            },
-            config: {
-              mercadoPagoAccessToken: accessToken,
-            },
-          }),
-        });
+      const response = await fetch('/api/mercadopago/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: total,
+          paymentMethodType: 'credit_card',
+          description: `MD Studio Play - ${items.map((i) => i.pack.title).join(', ')}`.slice(0, 100),
+          payer: {
+            name: customerName.trim(),
+            email: customerEmail.trim(),
+            phone: customerPhone,
+            cpf: customerCpf.replace(/\D/g, ''),
+          },
+          card: {
+            cardNumber: cleanCard,
+            cardHolder: cardHolder.trim(),
+            cardExp: cardExp.trim(),
+            cvv: cleanCvvNum,
+            installments,
+          },
+          config: {
+            mercadoPagoAccessToken: accessToken,
+          },
+        }),
+      });
 
-        const data = await response.json();
+      const data = await response.json();
 
-        if (data.success && (data.status === 'approved' || data.status === 'processed')) {
-          setMpPaymentId(data.paymentId || data.orderId);
-          await handleFinalizeOrderAndRedirect('card');
-          return;
-        } else if (data.status === 'in_process' || data.status === 'action_required') {
-          setMpPaymentId(data.paymentId || data.orderId);
-          await handleFinalizeOrderAndRedirect('card');
-          return;
-        } else {
-          setFormError(
-            data.error ||
-            data.mpDetails?.message ||
-            'Pagamento com cartão recusado. Verifique os dados ou pague via PIX.'
-          );
-          return;
-        }
-      } else {
-        // Fallback demo approval when no live access token configured yet
+      if (data.success && (data.status === 'approved' || data.status === 'processed')) {
+        setMpPaymentId(data.paymentId || data.orderId);
         await handleFinalizeOrderAndRedirect('card');
+        return;
+      } else if (data.success && (data.status === 'in_process' || data.status === 'action_required' || data.status === 'pending')) {
+        setMpPaymentId(data.paymentId || data.orderId);
+        await handleFinalizeOrderAndRedirect('card');
+        return;
+      } else if (!data.success && data.requiresToken) {
+        // Fallback demo approval only if no token is configured anywhere
+        await handleFinalizeOrderAndRedirect('card');
+        return;
+      } else {
+        setFormError(
+          data.error ||
+          data.mpDetails?.message ||
+          'Pagamento com cartão recusado pela operadora. Verifique os dados ou pague via PIX.'
+        );
+        return;
       }
     } catch (err: any) {
       console.warn('Erro ao processar cartão Mercado Pago:', err);
-      await handleFinalizeOrderAndRedirect('card');
+      setFormError('Erro ao comunicar com o Mercado Pago. Tente novamente ou use PIX.');
     } finally {
       setCardLoading(false);
     }

@@ -9,7 +9,6 @@ import { ITEMS_PER_PAGE } from './data/packs';
 import { audioPlayer } from './utils/audioSynth';
 import { useStore } from './context/StoreContext';
 import { Header, TopMenuTab } from './components/Header';
-import { TopBanner } from './components/TopBanner';
 import { HeroBanner } from './components/HeroBanner';
 import { CategoryFilter } from './components/CategoryFilter';
 import { PackCard } from './components/PackCard';
@@ -24,7 +23,7 @@ import { CustomerAreaModal } from './components/CustomerAreaModal';
 import { ExtraCategoryView } from './components/ExtraCategoryView';
 import { FlyerShowPage } from './components/FlyerShowPage';
 import { MidiPageView } from './components/MidiPageView';
-import { SearchX, Shield, Sparkles } from 'lucide-react';
+import { SearchX, Sparkles } from 'lucide-react';
 
 export default function App() {
   const {
@@ -192,6 +191,25 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Keyboard shortcut Ctrl+Alt+A and URL param ?admin=true to enter Admin
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('admin') === 'true' || params.get('painel') === 'true') {
+        setIsAdminMode(true);
+      }
+    } catch {}
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        setIsAdminMode(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [setIsAdminMode]);
+
   // If Admin mode is toggled, render the full Administrative Platform
   if (isAdminMode) {
     return <AdminPanel />;
@@ -202,22 +220,6 @@ export default function App() {
       style={{ backgroundColor: themeConfig.backgroundColor || '#0b0c0e' }}
       className="min-h-screen text-[#e1e3e7] flex flex-col selection:bg-emerald-500 selection:text-black transition-colors duration-200"
     >
-      {/* Dynamic Customizable Announcement Banner at Top */}
-      <TopBanner />
-
-      {/* Floating Quick Switch to Admin Platform */}
-      <div className="fixed bottom-6 left-6 z-40">
-        <button
-          type="button"
-          onClick={() => setIsAdminMode(true)}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-[#111216]/90 backdrop-blur-md border border-white/15 hover:border-emerald-500/50 text-white font-bold text-xs shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer group"
-        >
-          <div className="w-2.5 h-2.5 rounded-full bg-[#55c21b] animate-ping" />
-          <Shield className="w-3.5 h-3.5 text-[#55c21b]" />
-          <span>Painel Admin</span>
-        </button>
-      </div>
-
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-4 right-4 z-50 bg-[#55c21b] text-black font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-xl animate-in fade-in slide-in-from-top-2 duration-200">
@@ -307,7 +309,7 @@ export default function App() {
                   type="button"
                   onClick={() => {
                     setSearchQuery('');
-                    setSelectedCategory('Todos');
+                    setSelectedCategory('TODOS');
                   }}
                   style={{ backgroundColor: themeConfig.primaryColor }}
                   className="px-4 py-2 text-black font-extrabold text-xs rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
@@ -361,6 +363,10 @@ export default function App() {
           <FlyerShowPage
             onAddToCart={handleAddToCart}
             isInCart={cartItems.some((i) => i.pack.id === 'pack_flyer_150_mega')}
+            onReturnToPlaybacks={() => {
+              setActiveTopTab('playbacks');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
           />
         ) : (
           <ExtraCategoryView

@@ -92,7 +92,7 @@ async function processMercadoPagoOrder(req: Request, res: Response) {
       complement: '101',
     };
 
-    // If an Access Token is configured, call official Mercado Pago /v1/orders API
+    // If an Access Token is configured, call official Mercado Pago /v1/payments API
     if (accessToken && accessToken.trim().length > 10 && !accessToken.includes('mock-token')) {
       try {
         let cardTokenId = card?.token;
@@ -147,110 +147,98 @@ async function processMercadoPagoOrder(req: Request, res: Response) {
           }
         }
 
-        // Build payments payload according to Mercado Pago /v1/orders format
-        const paymentsArray: any[] = [];
+        // Build /v1/payments payload
+        let paymentPayload: any;
 
         if (isCard) {
-          paymentsArray.push({
-            amount: totalAmountStr,
-            payment_method: {
-              id: cardBrand || 'master',
-              type: 'credit_card',
-              token: cardTokenId,
-              installments: Number(card?.installments) || 1,
+          paymentPayload = {
+            transaction_amount: Number(parsedAmount.toFixed(2)),
+            token: cardTokenId,
+            description: (description || 'MD Stúdio Play - Playbacks Profissionais').slice(0, 100),
+            installments: Number(card?.installments) || 1,
+            payment_method_id: cardBrand || 'master',
+            payer: {
+              email: email,
+              first_name: firstName,
+              last_name: lastName,
+              identification: {
+                type: 'CPF',
+                number: cleanCpf,
+              },
             },
-          });
+            notification_url: `${process.env.APP_URL || ''}/api/mercadopago/webhook`,
+          };
         } else {
-          // Default: PIX bank transfer
-          paymentsArray.push({
-            amount: totalAmountStr,
-            payment_method: {
-              id: 'pix',
-              type: 'bank_transfer',
+          // PIX payment
+          paymentPayload = {
+            transaction_amount: Number(parsedAmount.toFixed(2)),
+            description: (description || 'MD Stúdio Play - Playbacks Profissionais').slice(0, 100),
+            payment_method_id: 'pix',
+            payer: {
+              email: email,
+              first_name: firstName,
+              last_name: lastName,
+              identification: {
+                type: 'CPF',
+                number: cleanCpf,
+              },
+              phone: {
+                area_code: areaCode,
+                number: phoneNumber,
+              },
             },
-            expiration_time: 'P1D',
-          });
+            notification_url: `${process.env.APP_URL || ''}/api/mercadopago/webhook`,
+          };
         }
 
-        // Exact /v1/orders Request Body
-        const orderPayload = {
-          type: 'online',
-          external_reference: externalRef,
-          transactions: {
-            payments: paymentsArray,
-          },
-          payer: {
-            email: email,
-            first_name: firstName,
-            last_name: lastName,
-            phone: {
-              area_code: areaCode,
-              number: phoneNumber,
-            },
-            identification: {
-              type: 'CPF',
-              number: cleanCpf,
-            },
-          },
-          shipment: {
-            address: shipmentAddress,
-          },
-          total_amount: totalAmountStr,
-          processing_mode: 'automatic',
-        };
-
-        const mpRes = await fetch('https://api.mercadopago.com/v1/orders', {
+        const mpRes = await fetch('https://api.mercadopago.com/v1/payments', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${accessToken.trim()}`,
             'X-Idempotency-Key': crypto.randomUUID(),
           },
-          body: JSON.stringify(orderPayload),
+          body: JSON.stringify(paymentPayload),
         });
 
         const mpData: any = await mpRes.json();
 
-        if (mpRes.ok && (mpData.id || mpData.transactions?.payments?.length)) {
-          const firstPayment = mpData.transactions?.payments?.[0];
-          const paymentMethod = firstPayment?.payment_method || {};
+        if (mpRes.ok && mpData.id) {
           const transactionData = mpData.point_of_interaction?.transaction_data;
-
-          const qrCode = paymentMethod.qr_code || transactionData?.qr_code || '';
-          const qrCodeBase64 = paymentMethod.qr_code_base64 || transactionData?.qr_code_base64 || '';
-          const ticketUrl = paymentMethod.ticket_url || transactionData?.ticket_url || '';
-          const paymentId = firstPayment?.id ? String(firstPayment.id) : String(mpData.id);
-          const orderId = String(mpData.id);
-          const status = firstPayment?.status || mpData.status;
-          const statusDetail = firstPayment?.status_detail || mpData.status_detail;
+          const qrCode = transactionData?.qr_code || '';
+          const qrCodeBase64 = transactionData?.qr_code_base64 || '';
+          const ticketUrl = transactionData?.ticket_url || '';
+          const paymentId = String(mpData.id);
+          const status = mpData.status;
+          const statusDetail = mpData.status_detail;
 
           return res.json({
             success: true,
-            provider: 'mercadopago_orders_api',
-            orderId,
+            provider: 'mercadopago_payments_api',
+            orderId: paymentId,
             paymentId,
             status,
             statusDetail,
-            totalAmount: mpData.total_amount,
+            totalAmount: mpData.transaction_amount,
             qrCode,
             qrCodeBase64,
             ticketUrl,
-            expirationDate: firstPayment?.date_of_expiration || firstPayment?.expiration_time,
+            expirationDate: mpData.date_of_expiration,
             order: mpData,
           });
         } else {
-          console.warn('Mercado Pago /v1/orders error response:', mpData);
+          console.warn('Mercado Pago /v1/payments error response:', mpData);
           return res.status(mpRes.status || 400).json({
             success: false,
             error:
               mpData.message ||
               mpData.cause?.[0]?.description ||
-              'Falha ao criar pedido na API /v1/orders do Mercado Pago.',
+              'Falha ao processar pagamento no Mercado Pago.',
             mpDetails: mpData,
           });
         }
       } catch (mpErr: any) {
-        console.error('Error contacting Mercado Pago /v1/orders API:', mpErr);
+        console.error('Error contacting Mercado Pago /v1/payments API:', mpErr);
         return res.status(502).json({
           success: false,
           error: 'Erro de conexão com o Mercado Pago: ' + (mpErr?.message || 'Servidor indisponível'),
@@ -273,6 +261,44 @@ async function processMercadoPagoOrder(req: Request, res: Response) {
 
 // API: Mercado Pago Create Order (/v1/orders for PIX and Credit Card)
 app.post('/api/mercadopago/create-order', processMercadoPagoOrder);
+
+// API: Mercado Pago Configuration Status (Safe for UI, no secret exposure)
+app.get('/api/mercadopago/status', async (_req: Request, res: Response) => {
+  const envToken = process.env.MERCADO_PAGO_ACCESS_TOKEN || '';
+  const hasEnvToken = Boolean(envToken && envToken.trim().length > 10 && !envToken.includes('mock-token'));
+
+  if (!hasEnvToken) {
+    return res.json({
+      configured: false,
+      hasEnvToken: false,
+      message: 'MERCADO_PAGO_ACCESS_TOKEN não configurado.',
+    });
+  }
+
+  try {
+    const meRes = await fetch('https://api.mercadopago.com/users/me', {
+      headers: { Authorization: `Bearer ${envToken.trim()}` },
+    });
+    if (meRes.ok) {
+      const meData: any = await meRes.json();
+      return res.json({
+        configured: true,
+        hasEnvToken: true,
+        isLive: true,
+        accountNickname: meData.nickname || 'MD Studio',
+        siteId: meData.site_id || 'MLB',
+        tokenPrefix: envToken.substring(0, 10) + '...',
+      });
+    }
+  } catch {}
+
+  return res.json({
+    configured: true,
+    hasEnvToken: true,
+    isLive: true,
+    tokenPrefix: envToken.substring(0, 10) + '...',
+  });
+});
 
 // API: Mercado Pago Create PIX (routes to the unified /v1/orders engine)
 app.post('/api/mercadopago/create-pix', async (req: Request, res: Response) => {
@@ -408,6 +434,18 @@ app.post('/api/whatsapp/send-otp', async (req: Request, res: Response) => {
 // Setup Vite or Static File Serving
 async function startServer() {
   const isProduction = process.env.NODE_ENV === 'production';
+
+  // Ensure image assets are always served reliably regardless of route prefix
+  const imagesDir = path.resolve(__dirname, 'src/assets/images');
+  const publicDir = path.resolve(__dirname, 'public');
+  if (fs.existsSync(imagesDir)) {
+    app.use('/src/assets/images', express.static(imagesDir));
+    app.use('/assets/images', express.static(imagesDir));
+    app.use('/images', express.static(imagesDir));
+  }
+  if (fs.existsSync(publicDir)) {
+    app.use(express.static(publicDir));
+  }
 
   if (!isProduction) {
     const { createServer } = await import('vite');

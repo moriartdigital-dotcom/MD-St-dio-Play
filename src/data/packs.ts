@@ -512,7 +512,7 @@ export const ALL_PACKS: PlaybackPack[] = [
     ],
     "audioUrl": "https://moriartdigital.com.br/mdstudio/wa_files/selecao%20top%202026.mp3",
     "orderIndex": 3,
-    "image": "/src/assets/images/pack_pagode_axe_1790256511699.jpg",
+    "image": "/pack_pagode_axe_1790256511699.jpg",
     "title": "Seleção TOP 2026",
     "originalPrice": 32.94,
     "id": "pack-44",
@@ -562,7 +562,7 @@ export const ALL_PACKS: PlaybackPack[] = [
     "sampleRhythm": "forro",
     "releaseYear": 2026,
     "originalPrice": 32.99,
-    "image": "/src/assets/images/pack_sertanejo_chicotado_1790256490786.jpg",
+    "image": "/pack_sertanejo_chicotado_1790256490786.jpg",
     "title": "Piseirão 2026",
     "postSaleUrl": "https://drive.google.com/drive/folders/1YylcU4xijJcvF-_WXJL1t3uNJULLZN-p?usp=drive_link",
     "genre": "Piseiro",
@@ -636,7 +636,7 @@ export const ALL_PACKS: PlaybackPack[] = [
     "originalPrice": 32.99,
     "artist": "Pisadinha",
     "updatedAt": "2026-09-25T15:28:40.435Z",
-    "image": "/src/assets/images/pack_pagode_axe_1790256511699.jpg",
+    "image": "/pack_pagode_axe_1790256511699.jpg",
     "title": "Pisadinha As Melhores",
     "discountPrice": 27.99,
     "sampleRhythm": "piseiro",
@@ -718,7 +718,7 @@ export const ALL_PACKS: PlaybackPack[] = [
     "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTLkEE0ZBYxZv6EZCWRtin618KWkKPsumQ3vud1fdfaXA&s=10"
   },
   {
-    "image": "/src/assets/images/pack_piseiro_forro_1790256479941.jpg",
+    "image": "/pack_piseiro_forro_1790256479941.jpg",
     "title": "Sel. Forrózão 2026",
     "genres": [
       "Forró",

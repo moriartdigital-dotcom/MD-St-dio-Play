@@ -127,7 +127,7 @@ const DEFAULT_THEME: SiteThemeConfig = {
 };
 
 const DEFAULT_BANNER: TopBannerConfig = {
-  enabled: true,
+  enabled: false,
   text: 'PROMOÇÃO DE LANÇAMENTO MD STÚDIO: USE O CUPOM MD2026 E GANHE 20% OFF EM TODO O SITE! ⚡ LIBERAÇÃO IMEDIATA',
   highlightTag: 'SUPER OFERTA',
   linkUrl: '#',
@@ -229,7 +229,7 @@ export const DEFAULT_FLYER_SHOW: FlyerShowConfig = {
   title: 'MEGA COLETÂNEA DESIGNER - PACK 150+ FLYERS EDITÁVEIS',
   description:
     'Transforme suas divulgações em segundos! Tenha acesso ao acervo profissional definitivo preferido pelos maiores produtores e cantores de shows do Brasil. Arquivos limpos e super organizados em camadas.',
-  coverImage: '/src/assets/images/flyer_main_pack_1790608448982.jpg',
+  coverImage: '/flyer_main_pack_1790608448982.jpg',
   originalPrice: 79.04,
   discountPrice: 49.9,
   discountTag: 'Economize 60%',
@@ -245,43 +245,43 @@ export const DEFAULT_FLYER_SHOW: FlyerShowConfig = {
       id: 'fl_1',
       title: 'Cavalgada dos Amigos',
       category: 'Cavalgada & Sertanejo',
-      imageUrl: '/src/assets/images/flyer_arrocha_show_1790608491358.jpg',
+      imageUrl: '/flyer_arrocha_show_1790608491358.jpg',
     },
     {
       id: 'fl_2',
       title: 'Eu Arraiá',
       category: 'Forró & São João',
-      imageUrl: '/src/assets/images/flyer_forro_arraia_1790608465989.jpg',
+      imageUrl: '/flyer_forro_arraia_1790608465989.jpg',
     },
     {
       id: 'fl_3',
       title: 'Boteco Arrocha Sofrência',
       category: 'Arrocha & Seresta',
-      imageUrl: '/src/assets/images/flyer_arrocha_show_1790608491358.jpg',
+      imageUrl: '/flyer_arrocha_show_1790608491358.jpg',
     },
     {
       id: 'fl_4',
       title: 'Contrate Para Seu Evento',
       category: 'Cantor & Banda',
-      imageUrl: '/src/assets/images/flyer_main_pack_1790608448982.jpg',
+      imageUrl: '/flyer_main_pack_1790608448982.jpg',
     },
     {
       id: 'fl_5',
       title: '4º Aniversário da Igreja',
       category: 'Gospel & Igreja',
-      imageUrl: '/src/assets/images/flyer_gospel_show_1790608478189.jpg',
+      imageUrl: '/flyer_gospel_show_1790608478189.jpg',
     },
     {
       id: 'fl_6',
       title: 'Congresso de Jovens',
       category: 'Congresso Gospel',
-      imageUrl: '/src/assets/images/flyer_gospel_show_1790608478189.jpg',
+      imageUrl: '/flyer_gospel_show_1790608478189.jpg',
     },
     {
       id: 'fl_7',
       title: 'Bloquinho de Carnaval 2026',
       category: 'Carnaval & Micareta',
-      imageUrl: '/src/assets/images/flyer_forro_arraia_1790608465989.jpg',
+      imageUrl: '/flyer_forro_arraia_1790608465989.jpg',
     },
   ],
   demoDownloadUrl: 'https://drive.google.com/drive/folders/demo-gratis-mdstudio',
@@ -618,7 +618,20 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const saved = localStorage.getItem('jsp_flyer_show');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return {
+          ...DEFAULT_FLYER_SHOW,
+          ...parsed,
+          coverImage: parsed.coverImage
+            ? parsed.coverImage.replace('/src/assets/images/', '/')
+            : DEFAULT_FLYER_SHOW.coverImage,
+          gallery: Array.isArray(parsed.gallery) && parsed.gallery.length > 0
+            ? parsed.gallery.map((g: any) => ({
+                ...g,
+                imageUrl: g.imageUrl ? g.imageUrl.replace('/src/assets/images/', '/') : g.imageUrl,
+              }))
+            : DEFAULT_FLYER_SHOW.gallery,
+        };
       } catch {
         return DEFAULT_FLYER_SHOW;
       }

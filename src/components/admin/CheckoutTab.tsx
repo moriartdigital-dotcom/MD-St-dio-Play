@@ -39,6 +39,23 @@ export const CheckoutTab: React.FC = () => {
   const [waSending, setWaSending] = useState(false);
   const [waResult, setWaResult] = useState<{ success: boolean; message: string; url?: string } | null>(null);
 
+  // Mercado Pago Server Environment Secret Status
+  const [mpEnvStatus, setMpEnvStatus] = useState<{
+    configured?: boolean;
+    hasEnvToken?: boolean;
+    isLive?: boolean;
+    accountNickname?: string;
+    siteId?: string;
+    tokenPrefix?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    fetch('/api/mercadopago/status')
+      .then((r) => r.json())
+      .then((d) => setMpEnvStatus(d))
+      .catch(() => {});
+  }, []);
+
   const handleTestWhatsApp = async (e: React.FormEvent) => {
     e.preventDefault();
     setWaSending(true);
@@ -443,6 +460,20 @@ export const CheckoutTab: React.FC = () => {
               />
             </div>
 
+            {/* Environment Secret Status Banner */}
+            {mpEnvStatus?.hasEnvToken && (
+              <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2 text-emerald-400 font-bold">
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                  <span>MERCADO PAGO ATIVO VIA VARIÁVEL SECRET</span>
+                </div>
+                <div className="text-[11px] font-mono text-neutral-400 flex items-center gap-2">
+                  <span>Conta: <strong className="text-white">{mpEnvStatus.accountNickname}</strong> ({mpEnvStatus.siteId})</span>
+                  <span className="text-emerald-400 font-semibold bg-emerald-500/20 px-2 py-0.5 rounded text-[10px]">100% Protegido</span>
+                </div>
+              </div>
+            )}
+
             {/* Secret Key / Access Token */}
             <div>
               <label className="block text-neutral-400 mb-1 font-semibold flex items-center justify-between">
@@ -459,7 +490,11 @@ export const CheckoutTab: React.FC = () => {
               </label>
               <input
                 type="password"
-                value={checkoutConfig.mercadoPagoAccessToken || checkoutConfig.creditCardSecretToken}
+                value={
+                  checkoutConfig.mercadoPagoAccessToken ||
+                  checkoutConfig.creditCardSecretToken ||
+                  (mpEnvStatus?.hasEnvToken ? '••••••••••••••••••••••••••••••••••••••••••••' : '')
+                }
                 onChange={(e) => {
                   setCheckoutConfig({
                     ...checkoutConfig,
@@ -468,11 +503,17 @@ export const CheckoutTab: React.FC = () => {
                   });
                   showSaveNotice();
                 }}
-                placeholder="APP_USR-0000000000000000-000000-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-000000000"
+                placeholder={
+                  mpEnvStatus?.hasEnvToken
+                    ? 'Configurado via SECRET (MERCADO_PAGO_ACCESS_TOKEN)'
+                    : 'APP_USR-0000000000000000-000000-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-000000000'
+                }
                 className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white font-mono outline-none focus:border-white/30 text-xs"
               />
               <span className="text-[10px] text-neutral-500 mt-1 block">
-                Utilizado para gerar o QR Code PIX oficial e processar pagamentos via API do Mercado Pago.
+                {mpEnvStatus?.hasEnvToken
+                  ? 'O Access Token está injetado com segurança no servidor através da variável SECRET MERCADO_PAGO_ACCESS_TOKEN. O sistema já está apto a receber pagamentos reais via PIX e Cartão de Crédito.'
+                  : 'Utilizado para gerar o QR Code PIX oficial e processar pagamentos via API do Mercado Pago.'}
               </span>
             </div>
 

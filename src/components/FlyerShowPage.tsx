@@ -13,16 +13,36 @@ import {
   Layers,
   FileCode2,
   Palette,
+  ArrowLeft,
 } from 'lucide-react';
+
+const flyerMainPackImg = '/flyer_main_pack_1790608448982.jpg';
+const flyerArrochaImg = '/flyer_arrocha_show_1790608491358.jpg';
+const flyerForroImg = '/flyer_forro_arraia_1790608465989.jpg';
+const flyerGospelImg = '/flyer_gospel_show_1790608478189.jpg';
+
+export const resolveFlyerImage = (url?: string): string => {
+  if (!url) return flyerMainPackImg;
+  if (url.includes('flyer_arrocha_show')) return flyerArrochaImg;
+  if (url.includes('flyer_forro_arraia')) return flyerForroImg;
+  if (url.includes('flyer_gospel_show')) return flyerGospelImg;
+  if (url.includes('flyer_main_pack')) return flyerMainPackImg;
+  if (url.startsWith('/src/assets/images/')) {
+    return url.replace('/src/assets/images/', '/');
+  }
+  return url;
+};
 
 interface FlyerShowPageProps {
   onAddToCart: (item: any) => void;
   isInCart: boolean;
+  onReturnToPlaybacks?: () => void;
 }
 
 export const FlyerShowPage: React.FC<FlyerShowPageProps> = ({
   onAddToCart,
   isInCart,
+  onReturnToPlaybacks,
 }) => {
   const { flyerShowConfig } = useStore();
   const [selectedPreviewFlyer, setSelectedPreviewFlyer] = useState<FlyerItem | null>(null);
@@ -36,7 +56,7 @@ export const FlyerShowPage: React.FC<FlyerShowPageProps> = ({
       genres: ['Flyer Show', 'Design Gráfico', 'Artes Editáveis'],
       originalPrice: flyerShowConfig.originalPrice || 79.04,
       discountPrice: flyerShowConfig.discountPrice || 49.9,
-      image: flyerShowConfig.coverImage || '/src/assets/images/flyer_main_pack_1790608448982.jpg',
+      image: resolveFlyerImage(flyerShowConfig.coverImage),
       releaseYear: 2026,
       tracks: [],
       postSaleUrl: flyerShowConfig.postSaleUrl || 'https://drive.google.com/drive/folders/pack-150-flyers-mdstudio',
@@ -49,6 +69,20 @@ export const FlyerShowPage: React.FC<FlyerShowPageProps> = ({
 
   return (
     <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-6 sm:space-y-8 animate-in fade-in duration-300">
+      {/* Return to Main Storefront Button at Top */}
+      {onReturnToPlaybacks && (
+        <div className="flex items-center justify-between pb-1">
+          <button
+            type="button"
+            onClick={onReturnToPlaybacks}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#11161d] hover:bg-[#161d26] text-cyan-400 hover:text-cyan-300 border border-cyan-500/30 hover:border-cyan-500/60 font-extrabold text-xs sm:text-sm cursor-pointer transition-all active:scale-95 shadow-lg shadow-cyan-950/40 group"
+          >
+            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+            <span>Voltar para a Loja de Playbacks & Ritmos</span>
+          </button>
+        </div>
+      )}
+
       {/* Top Header of the Page identical to image */}
       <div className="text-center space-y-1.5 sm:space-y-2">
         <div className="flex items-center justify-center gap-3 sm:gap-6">
@@ -75,12 +109,12 @@ export const FlyerShowPage: React.FC<FlyerShowPageProps> = ({
           <div className="lg:col-span-5 flex justify-center">
             <div className="relative w-full max-w-md rounded-2xl overflow-hidden border border-cyan-500/40 shadow-[0_0_35px_rgba(6,182,212,0.25)] group">
               <img
-                src={flyerShowConfig.coverImage || '/src/assets/images/flyer_main_pack_1790608448982.jpg'}
+                src={resolveFlyerImage(flyerShowConfig.coverImage)}
                 alt={flyerShowConfig.title}
                 className="w-full h-auto object-cover rounded-2xl group-hover:scale-102 transition-transform duration-300"
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
-                  target.src = '/src/assets/images/flyer_main_pack_1790608448982.jpg';
+                  target.src = flyerMainPackImg;
                 }}
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
@@ -170,12 +204,12 @@ export const FlyerShowPage: React.FC<FlyerShowPageProps> = ({
               >
                 <div className="aspect-[3/4] w-full overflow-hidden bg-neutral-900 relative">
                   <img
-                    src={flyer.imageUrl}
+                    src={resolveFlyerImage(flyer.imageUrl)}
                     alt={flyer.title}
                     className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-300"
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;
-                      target.src = '/src/assets/images/flyer_main_pack_1790608448982.jpg';
+                      target.src = flyerMainPackImg;
                     }}
                   />
                   <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -209,6 +243,20 @@ export const FlyerShowPage: React.FC<FlyerShowPageProps> = ({
             <span>{flyerShowConfig.demoButtonText || 'DOWNLOAD MODELO DEMO GRATIS'}</span>
           </a>
         </div>
+
+        {/* Bottom Return to Store Button */}
+        {onReturnToPlaybacks && (
+          <div className="mt-6 pt-6 border-t border-white/10 flex justify-center">
+            <button
+              type="button"
+              onClick={onReturnToPlaybacks}
+              className="inline-flex items-center gap-2.5 px-6 py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white border border-white/10 hover:border-white/20 font-extrabold text-xs sm:text-sm cursor-pointer transition-all active:scale-95 group shadow-md"
+            >
+              <ArrowLeft className="w-4 h-4 text-cyan-400 group-hover:-translate-x-1 transition-transform" />
+              <span>Voltar ao Catálogo Completo de Playbacks & Ritmos</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Lightbox Preview Modal for Flyer Inspection */}
@@ -237,9 +285,13 @@ export const FlyerShowPage: React.FC<FlyerShowPageProps> = ({
             {/* Flyer Image Preview */}
             <div className="p-4 flex justify-center bg-black/50">
               <img
-                src={selectedPreviewFlyer.imageUrl}
+                src={resolveFlyerImage(selectedPreviewFlyer.imageUrl)}
                 alt={selectedPreviewFlyer.title}
                 className="max-h-[60vh] object-contain rounded-xl shadow-lg border border-white/10"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.src = flyerMainPackImg;
+                }}
               />
             </div>
 

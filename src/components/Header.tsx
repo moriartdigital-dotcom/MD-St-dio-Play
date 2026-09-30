@@ -41,6 +41,7 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={() => {
                 handleTabClick('playbacks');
+                onSearchChange('');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
               title="MD Stúdio Play - Página Inicial"

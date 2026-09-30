@@ -8,7 +8,7 @@ interface FooterProps {
 }
 
 export const Footer: React.FC<FooterProps> = () => {
-  const { footerConfig, themeConfig } = useStore();
+  const { footerConfig, themeConfig, setIsAdminMode } = useStore();
 
   return (
     <footer className="w-full bg-[#08090b] border-t border-white/[0.06] pt-12 pb-14 px-4 sm:px-6 mt-16">
@@ -35,6 +35,17 @@ export const Footer: React.FC<FooterProps> = () => {
           </div>
           <span className="hidden sm:inline text-neutral-600">·</span>
           <span>Áudios Masterizados em 320kbps</span>
+        </div>
+
+        {/* Subtle Admin Access */}
+        <div className="mt-8 pt-4 border-t border-white/[0.04] flex items-center justify-center text-[11px] text-neutral-600">
+          <button
+            type="button"
+            onClick={() => setIsAdminMode(true)}
+            className="hover:text-neutral-400 transition-colors cursor-pointer"
+          >
+            Gestão Administrativa
+          </button>
         </div>
       </div>
     </footer>
