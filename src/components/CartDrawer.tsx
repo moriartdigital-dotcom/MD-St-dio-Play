@@ -391,6 +391,16 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     checkoutConfig,
   ]);
 
+  // Close on Escape key press
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   const handleCopyPix = () => {
     if (mpQrCode) {
       navigator.clipboard.writeText(mpQrCode);
@@ -458,36 +468,35 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center sm:justify-end overflow-hidden p-3.5 sm:p-0 animate-in fade-in duration-200">
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity"
         onClick={onClose}
       />
 
-      {/* Slide-over panel */}
-      <div className="fixed inset-y-0 right-0 max-w-full flex pl-6 sm:pl-10">
-        <div className="w-screen max-w-md bg-[#0e1014] border-l border-white/10 flex flex-col shadow-2xl text-neutral-200">
-          {/* Header */}
-          <div className="p-4 sm:p-5 border-b border-white/10 flex items-center justify-between bg-[#12141a]">
-            <div className="flex items-center gap-2">
-              <ShoppingBag className="w-5 h-5 text-emerald-400" />
-              <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                {isCompleted
-                  ? 'Compra Concluída'
-                  : isCheckingOut
-                  ? 'Finalizar Compra / Checkout'
-                  : `Meu Carrinho (${items.reduce((acc, i) => acc + i.quantity, 0)})`}
-              </h2>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
+      {/* Pop-up on Mobile (Centered in Screen) / Slide-over Drawer on Desktop (Right Panel) */}
+      <div className="relative z-10 w-full max-w-[94vw] sm:max-w-md max-h-[88vh] sm:max-h-full sm:h-full bg-[#0e1014] rounded-2xl sm:rounded-none border border-white/15 sm:border-l sm:border-t-0 sm:border-b-0 sm:border-r-0 sm:border-white/10 flex flex-col shadow-2xl shadow-black/80 text-neutral-200 overflow-hidden animate-in zoom-in-95 sm:zoom-in-100 sm:slide-in-from-right duration-200">
+        {/* Header */}
+        <div className="p-4 sm:p-5 border-b border-white/10 flex items-center justify-between bg-[#12141a] shrink-0">
+          <div className="flex items-center gap-2">
+            <ShoppingBag className="w-5 h-5 text-emerald-400" />
+            <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
+              {isCompleted
+                ? 'Compra Concluída'
+                : isCheckingOut
+                ? 'Finalizar Compra / Checkout'
+                : `Meu Carrinho (${items.reduce((acc, i) => acc + i.quantity, 0)})`}
+            </h2>
           </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
           {/* Content Body */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
@@ -1099,7 +1108,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
           {/* Footer CTA: Botão para Avançar para o Checkout */}
           {!isCompleted && !isCheckingOut && items.length > 0 && (
-            <div className="p-4 border-t border-white/10 bg-[#12141a] space-y-2">
+            <div className="p-4 border-t border-white/10 bg-[#12141a] space-y-2 shrink-0">
               <button
                 type="button"
                 onClick={() => setIsCheckingOut(true)}
@@ -1115,7 +1124,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             </div>
           )}
         </div>
-      </div>
     </div>
   );
 };
