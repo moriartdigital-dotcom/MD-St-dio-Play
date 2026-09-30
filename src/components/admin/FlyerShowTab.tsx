@@ -17,6 +17,10 @@ import {
   FileText,
   DollarSign,
   Layers,
+  Pencil,
+  Copy,
+  X,
+  Check,
 } from 'lucide-react';
 
 export const FlyerShowTab: React.FC = () => {
@@ -29,6 +33,12 @@ export const FlyerShowTab: React.FC = () => {
   const [newFlyerTitle, setNewFlyerTitle] = useState('');
   const [newFlyerCategory, setNewFlyerCategory] = useState('');
   const [newFlyerImage, setNewFlyerImage] = useState('');
+
+  // Editing state for gallery flyer item
+  const [editingFlyer, setEditingFlyer] = useState<FlyerItem | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [editImage, setEditImage] = useState('');
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -76,20 +86,81 @@ export const FlyerShowTab: React.FC = () => {
       category: newFlyerCategory.trim() || 'Show & Eventos',
       imageUrl: newFlyerImage.trim(),
     };
-    setFormData({
+    const updated = {
       ...formData,
       gallery: [...(formData.gallery || []), newItem],
-    });
+    };
+    setFormData(updated);
+    setFlyerShowConfig(updated);
     setNewFlyerTitle('');
     setNewFlyerCategory('');
     setNewFlyerImage('');
+    showToast(`Modelo "${newItem.title}" adicionado à galeria!`);
+  };
+
+  const handleDuplicateGalleryFlyer = (flyer: FlyerItem) => {
+    const newId = `fl_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const duplicatedItem: FlyerItem = {
+      ...flyer,
+      id: newId,
+      title: `${flyer.title} (Cópia)`,
+    };
+    const currentIndex = (formData.gallery || []).findIndex((f) => f.id === flyer.id);
+    const updatedGallery = [...(formData.gallery || [])];
+    if (currentIndex >= 0) {
+      updatedGallery.splice(currentIndex + 1, 0, duplicatedItem);
+    } else {
+      updatedGallery.push(duplicatedItem);
+    }
+    const updated = { ...formData, gallery: updatedGallery };
+    setFormData(updated);
+    setFlyerShowConfig(updated);
+    showToast(`Modelo "${flyer.title}" duplicado com sucesso!`);
+  };
+
+  const handleStartEdit = (flyer: FlyerItem) => {
+    setEditingFlyer(flyer);
+    setEditTitle(flyer.title);
+    setEditCategory(flyer.category);
+    setEditImage(flyer.imageUrl);
+  };
+
+  const handleSaveEdit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!editingFlyer) return;
+    if (!editTitle.trim()) {
+      showToast('O título do modelo não pode ficar vazio.');
+      return;
+    }
+    const updatedGallery = (formData.gallery || []).map((f) => {
+      if (f.id === editingFlyer.id) {
+        return {
+          ...f,
+          title: editTitle.trim(),
+          category: editCategory.trim() || 'Show & Eventos',
+          imageUrl: editImage.trim() || f.imageUrl,
+        };
+      }
+      return f;
+    });
+    const updated = { ...formData, gallery: updatedGallery };
+    setFormData(updated);
+    setFlyerShowConfig(updated);
+    setEditingFlyer(null);
+    showToast(`Modelo "${editTitle.trim()}" atualizado com sucesso!`);
   };
 
   const handleRemoveGalleryFlyer = (id: string) => {
-    setFormData({
-      ...formData,
-      gallery: (formData.gallery || []).filter((f) => f.id !== id),
-    });
+    const flyerItem = (formData.gallery || []).find((f) => f.id === id);
+    if (window.confirm(`Deseja realmente excluir o modelo "${flyerItem?.title || 'selecionado'}"?`)) {
+      const updated = {
+        ...formData,
+        gallery: (formData.gallery || []).filter((f) => f.id !== id),
+      };
+      setFormData(updated);
+      setFlyerShowConfig(updated);
+      showToast(`Modelo "${flyerItem?.title || 'selecionado'}" excluído com sucesso!`);
+    }
   };
 
   return (
@@ -388,7 +459,7 @@ export const FlyerShowTab: React.FC = () => {
             {(formData.gallery || []).map((flyer) => (
               <div
                 key={flyer.id}
-                className="flex items-center gap-3 p-3 bg-black/40 border border-white/10 rounded-xl"
+                className="flex items-center gap-3 p-3 bg-black/40 border border-white/10 hover:border-white/20 transition-all rounded-xl group"
               >
                 <img
                   src={resolveFlyerImage(flyer.imageUrl)}
@@ -396,20 +467,40 @@ export const FlyerShowTab: React.FC = () => {
                   className="w-12 h-16 object-cover rounded-lg shrink-0 border border-white/10"
                 />
                 <div className="min-w-0 flex-1">
-                  <span className="block text-xs font-bold text-white truncate">
+                  <span className="block text-xs font-bold text-white truncate" title={flyer.title}>
                     {flyer.title}
                   </span>
-                  <span className="block text-[10px] text-cyan-400 truncate">
+                  <span className="block text-[10px] text-cyan-400 truncate" title={flyer.category}>
                     {flyer.category}
                   </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveGalleryFlyer(flyer.id)}
-                  className="p-1.5 rounded-lg text-neutral-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                {/* Actions: Editar, Duplicar, Excluir */}
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleStartEdit(flyer)}
+                    title="Editar modelo"
+                    className="p-1.5 rounded-lg text-neutral-400 hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors cursor-pointer"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDuplicateGalleryFlyer(flyer)}
+                    title="Duplicar modelo"
+                    className="p-1.5 rounded-lg text-neutral-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors cursor-pointer"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveGalleryFlyer(flyer.id)}
+                    title="Excluir modelo"
+                    className="p-1.5 rounded-lg text-neutral-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -498,6 +589,107 @@ export const FlyerShowTab: React.FC = () => {
           </button>
         </div>
       </form>
+
+      {/* Modal de Edição de Modelo da Galeria de Flyers */}
+      {editingFlyer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-[#111216] border border-cyan-500/30 rounded-2xl shadow-2xl p-5 space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2 text-sm font-bold text-cyan-400">
+                <Pencil className="w-4 h-4" />
+                <span>Editar Modelo de Flyer</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingFlyer(null)}
+                className="p-1.5 text-neutral-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-4">
+              {/* Preview da Imagem */}
+              <div className="flex items-center gap-3 p-3 bg-black/50 border border-white/10 rounded-xl">
+                <img
+                  src={resolveFlyerImage(editImage || editingFlyer.imageUrl)}
+                  alt="Preview"
+                  className="w-14 h-20 object-cover rounded-lg border border-white/15 bg-black/60 shrink-0"
+                />
+                <div className="text-xs text-neutral-400 space-y-1">
+                  <span className="block font-semibold text-white">Pré-visualização do Flyer</span>
+                  <span className="block text-[11px] text-neutral-500">
+                    A miniatura é atualizada ao alterar a URL da imagem.
+                  </span>
+                </div>
+              </div>
+
+              {/* Campo Título */}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-300 mb-1">
+                  Título do Modelo *
+                </label>
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  placeholder="Ex: Cavalgada dos Amigos"
+                  className="w-full bg-black/50 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-cyan-400"
+                  required
+                />
+              </div>
+
+              {/* Campo Categoria / Subtítulo */}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-300 mb-1">
+                  Categoria / Subtítulo *
+                </label>
+                <input
+                  type="text"
+                  value={editCategory}
+                  onChange={(e) => setEditCategory(e.target.value)}
+                  placeholder="Ex: Cavalgada & Sertanejo"
+                  className="w-full bg-black/50 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-cyan-400"
+                  required
+                />
+              </div>
+
+              {/* Campo URL da Imagem */}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-300 mb-1">
+                  URL da Imagem do Flyer *
+                </label>
+                <input
+                  type="text"
+                  value={editImage}
+                  onChange={(e) => setEditImage(e.target.value)}
+                  placeholder="https://... ou caminho relativo da imagem"
+                  className="w-full bg-black/50 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-cyan-400"
+                  required
+                />
+              </div>
+
+              {/* Botões de Ação */}
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setEditingFlyer(null)}
+                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-extrabold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-lg shadow-cyan-500/20"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Salvar Alterações</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
