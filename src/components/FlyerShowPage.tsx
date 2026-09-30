@@ -23,6 +23,9 @@ const flyerGospelImg = '/flyer_gospel_show_1790608478189.jpg';
 
 export const resolveFlyerImage = (url?: string): string => {
   if (!url) return flyerMainPackImg;
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url;
+  }
   if (url.includes('flyer_arrocha_show')) return flyerArrochaImg;
   if (url.includes('flyer_forro_arraia')) return flyerForroImg;
   if (url.includes('flyer_gospel_show')) return flyerGospelImg;
@@ -54,12 +57,14 @@ export const FlyerShowPage: React.FC<FlyerShowPageProps> = ({
       artist: 'MD Stúdio Design',
       genre: 'Flyer Show',
       genres: ['Flyer Show', 'Design Gráfico', 'Artes Editáveis'],
-      originalPrice: flyerShowConfig.originalPrice || 79.04,
-      discountPrice: flyerShowConfig.discountPrice || 49.9,
+      originalPrice: flyerShowConfig.originalPrice || 97.0,
+      discountPrice: flyerShowConfig.discountPrice || 57.99,
       image: resolveFlyerImage(flyerShowConfig.coverImage),
       releaseYear: 2026,
       tracks: [],
-      postSaleUrl: flyerShowConfig.postSaleUrl || 'https://drive.google.com/drive/folders/pack-150-flyers-mdstudio',
+      postSaleUrl:
+        flyerShowConfig.postSaleUrl ||
+        'https://drive.google.com/drive/folders/1UdFKQtVtrGIcvS6U087ntO8-NYg8c2g1?usp=drive_link',
     });
   };
 

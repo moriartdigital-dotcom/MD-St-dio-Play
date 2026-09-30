@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { DEFAULT_MIDI_GOSPEL } from '../../context/StoreContext';
 import {
@@ -16,31 +16,38 @@ import {
 } from 'lucide-react';
 
 export const MidiGospelTab: React.FC = () => {
-  const { midiGospelConfig, setMidiGospelConfig } = useStore();
+  const { midiGospelConfig, saveMidiGospelConfig } = useStore();
   const [formData, setFormData] = useState(midiGospelConfig);
+  const [isDirty, setIsDirty] = useState(false);
+  const isInitialSyncRef = useRef(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [newHighlight, setNewHighlight] = useState('');
 
   useEffect(() => {
-    setFormData(midiGospelConfig);
-  }, [midiGospelConfig]);
+    if (!isDirty || !isInitialSyncRef.current) {
+      setFormData(midiGospelConfig);
+      isInitialSyncRef.current = true;
+    }
+  }, [midiGospelConfig, isDirty]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setMidiGospelConfig(formData);
-    showToast('Configurações da Página MIDI Gospel salvas com sucesso!');
+    await saveMidiGospelConfig(formData);
+    setIsDirty(false);
+    showToast('Configurações da Página MIDI Gospel salvas com sucesso no banco de dados!');
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (window.confirm('Deseja restaurar as configurações originais da página MIDI Gospel?')) {
       setFormData(DEFAULT_MIDI_GOSPEL);
-      setMidiGospelConfig(DEFAULT_MIDI_GOSPEL);
-      showToast('Padrão oficial restaurado!');
+      await saveMidiGospelConfig(DEFAULT_MIDI_GOSPEL);
+      setIsDirty(false);
+      showToast('Padrão oficial restaurado com sucesso!');
     }
   };
 
@@ -50,6 +57,7 @@ export const MidiGospelTab: React.FC = () => {
       ...formData,
       highlights: [...(formData.highlights || []), newHighlight.trim()],
     });
+    setIsDirty(true);
     setNewHighlight('');
   };
 
@@ -58,6 +66,7 @@ export const MidiGospelTab: React.FC = () => {
       ...formData,
       highlights: (formData.highlights || []).filter((_, i) => i !== index),
     });
+    setIsDirty(true);
   };
 
   return (

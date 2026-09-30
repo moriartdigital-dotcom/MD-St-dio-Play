@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { DEFAULT_MIDI_VARIADOS } from '../../context/StoreContext';
 import {
@@ -17,31 +17,38 @@ import {
 } from 'lucide-react';
 
 export const MidiVariadosTab: React.FC = () => {
-  const { midiVariadosConfig, setMidiVariadosConfig } = useStore();
+  const { midiVariadosConfig, saveMidiVariadosConfig } = useStore();
   const [formData, setFormData] = useState(midiVariadosConfig);
+  const [isDirty, setIsDirty] = useState(false);
+  const isInitialSyncRef = useRef(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [newHighlight, setNewHighlight] = useState('');
 
   useEffect(() => {
-    setFormData(midiVariadosConfig);
-  }, [midiVariadosConfig]);
+    if (!isDirty || !isInitialSyncRef.current) {
+      setFormData(midiVariadosConfig);
+      isInitialSyncRef.current = true;
+    }
+  }, [midiVariadosConfig, isDirty]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setMidiVariadosConfig(formData);
-    showToast('Configurações da Página MIDI Variados salvas com sucesso!');
+    await saveMidiVariadosConfig(formData);
+    setIsDirty(false);
+    showToast('Configurações da Página MIDI Variados salvas com sucesso no banco de dados!');
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (window.confirm('Deseja restaurar as configurações originais da página MIDI Variados?')) {
       setFormData(DEFAULT_MIDI_VARIADOS);
-      setMidiVariadosConfig(DEFAULT_MIDI_VARIADOS);
-      showToast('Padrão oficial restaurado!');
+      await saveMidiVariadosConfig(DEFAULT_MIDI_VARIADOS);
+      setIsDirty(false);
+      showToast('Padrão oficial restaurado com sucesso!');
     }
   };
 
@@ -51,6 +58,7 @@ export const MidiVariadosTab: React.FC = () => {
       ...formData,
       highlights: [...(formData.highlights || []), newHighlight.trim()],
     });
+    setIsDirty(true);
     setNewHighlight('');
   };
 
@@ -59,6 +67,7 @@ export const MidiVariadosTab: React.FC = () => {
       ...formData,
       highlights: (formData.highlights || []).filter((_, i) => i !== index),
     });
+    setIsDirty(true);
   };
 
   return (

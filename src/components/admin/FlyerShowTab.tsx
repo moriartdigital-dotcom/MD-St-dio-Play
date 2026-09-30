@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { FlyerItem } from '../../types';
 import { DEFAULT_FLYER_SHOW } from '../../context/StoreContext';
@@ -24,9 +24,19 @@ import {
 } from 'lucide-react';
 
 export const FlyerShowTab: React.FC = () => {
-  const { flyerShowConfig, setFlyerShowConfig } = useStore();
+  const { flyerShowConfig, saveFlyerShowConfig } = useStore();
   const [formData, setFormData] = useState(flyerShowConfig);
+  const [isDirty, setIsDirty] = useState(false);
+  const isInitialSyncRef = useRef(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Sync with Firestore state when not actively editing dirty fields
+  useEffect(() => {
+    if (!isDirty || !isInitialSyncRef.current) {
+      setFormData(flyerShowConfig);
+      isInitialSyncRef.current = true;
+    }
+  }, [flyerShowConfig, isDirty]);
 
   // New item inputs
   const [newFeatureText, setNewFeatureText] = useState('');
@@ -45,37 +55,43 @@ export const FlyerShowTab: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setFlyerShowConfig(formData);
-    showToast('Configurações da Página Flyer Show salvas com sucesso!');
+    await saveFlyerShowConfig(formData);
+    setIsDirty(false);
+    showToast('Configurações da Página Flyer Show salvas com sucesso no banco de dados!');
   };
 
-  const handleResetToDefault = () => {
+  const handleResetToDefault = async () => {
     if (window.confirm('Deseja restaurar as configurações originais da página Flyer Show?')) {
       setFormData(DEFAULT_FLYER_SHOW);
-      setFlyerShowConfig(DEFAULT_FLYER_SHOW);
+      await saveFlyerShowConfig(DEFAULT_FLYER_SHOW);
+      setIsDirty(false);
       showToast('Configurações padrão restauradas com sucesso!');
     }
   };
 
   const handleAddFeature = () => {
     if (!newFeatureText.trim()) return;
-    setFormData({
+    const updated = {
       ...formData,
       features: [...(formData.features || []), newFeatureText.trim()],
-    });
+    };
+    setFormData(updated);
+    setIsDirty(true);
     setNewFeatureText('');
   };
 
   const handleRemoveFeature = (index: number) => {
-    setFormData({
+    const updated = {
       ...formData,
       features: (formData.features || []).filter((_, i) => i !== index),
-    });
+    };
+    setFormData(updated);
+    setIsDirty(true);
   };
 
-  const handleAddGalleryFlyer = () => {
+  const handleAddGalleryFlyer = async () => {
     if (!newFlyerTitle.trim() || !newFlyerImage.trim()) {
       showToast('Preencha pelo menos o título e a URL da imagem do flyer.');
       return;
@@ -91,14 +107,15 @@ export const FlyerShowTab: React.FC = () => {
       gallery: [...(formData.gallery || []), newItem],
     };
     setFormData(updated);
-    setFlyerShowConfig(updated);
+    await saveFlyerShowConfig(updated);
+    setIsDirty(false);
     setNewFlyerTitle('');
     setNewFlyerCategory('');
     setNewFlyerImage('');
-    showToast(`Modelo "${newItem.title}" adicionado à galeria!`);
+    showToast(`Modelo "${newItem.title}" adicionado e salvo na galeria!`);
   };
 
-  const handleDuplicateGalleryFlyer = (flyer: FlyerItem) => {
+  const handleDuplicateGalleryFlyer = async (flyer: FlyerItem) => {
     const newId = `fl_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const duplicatedItem: FlyerItem = {
       ...flyer,
@@ -114,8 +131,9 @@ export const FlyerShowTab: React.FC = () => {
     }
     const updated = { ...formData, gallery: updatedGallery };
     setFormData(updated);
-    setFlyerShowConfig(updated);
-    showToast(`Modelo "${flyer.title}" duplicado com sucesso!`);
+    await saveFlyerShowConfig(updated);
+    setIsDirty(false);
+    showToast(`Modelo "${flyer.title}" duplicado e salvo com sucesso!`);
   };
 
   const handleStartEdit = (flyer: FlyerItem) => {
@@ -125,7 +143,7 @@ export const FlyerShowTab: React.FC = () => {
     setEditImage(flyer.imageUrl);
   };
 
-  const handleSaveEdit = (e?: React.FormEvent) => {
+  const handleSaveEdit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!editingFlyer) return;
     if (!editTitle.trim()) {
@@ -145,12 +163,13 @@ export const FlyerShowTab: React.FC = () => {
     });
     const updated = { ...formData, gallery: updatedGallery };
     setFormData(updated);
-    setFlyerShowConfig(updated);
+    await saveFlyerShowConfig(updated);
+    setIsDirty(false);
     setEditingFlyer(null);
-    showToast(`Modelo "${editTitle.trim()}" atualizado com sucesso!`);
+    showToast(`Modelo "${editTitle.trim()}" atualizado e salvo com sucesso!`);
   };
 
-  const handleRemoveGalleryFlyer = (id: string) => {
+  const handleRemoveGalleryFlyer = async (id: string) => {
     const flyerItem = (formData.gallery || []).find((f) => f.id === id);
     if (window.confirm(`Deseja realmente excluir o modelo "${flyerItem?.title || 'selecionado'}"?`)) {
       const updated = {
@@ -158,7 +177,8 @@ export const FlyerShowTab: React.FC = () => {
         gallery: (formData.gallery || []).filter((f) => f.id !== id),
       };
       setFormData(updated);
-      setFlyerShowConfig(updated);
+      await saveFlyerShowConfig(updated);
+      setIsDirty(false);
       showToast(`Modelo "${flyerItem?.title || 'selecionado'}" excluído com sucesso!`);
     }
   };

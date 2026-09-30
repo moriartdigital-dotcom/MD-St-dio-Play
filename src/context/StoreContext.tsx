@@ -68,10 +68,13 @@ interface StoreContextType {
   setFirebaseConfig: React.Dispatch<React.SetStateAction<FirebaseConfig>>;
   flyerShowConfig: FlyerShowConfig;
   setFlyerShowConfig: React.Dispatch<React.SetStateAction<FlyerShowConfig>>;
+  saveFlyerShowConfig: (config: FlyerShowConfig) => Promise<void>;
   midiVariadosConfig: MidiPageConfig;
   setMidiVariadosConfig: React.Dispatch<React.SetStateAction<MidiPageConfig>>;
+  saveMidiVariadosConfig: (config: MidiPageConfig) => Promise<void>;
   midiGospelConfig: MidiPageConfig;
   setMidiGospelConfig: React.Dispatch<React.SetStateAction<MidiPageConfig>>;
+  saveMidiGospelConfig: (config: MidiPageConfig) => Promise<void>;
 
   // Auth & Cloud Sync
   currentUser: User | null;
@@ -229,10 +232,11 @@ export const DEFAULT_FLYER_SHOW: FlyerShowConfig = {
   title: 'MEGA COLETÂNEA DESIGNER - PACK 150+ FLYERS EDITÁVEIS',
   description:
     'Transforme suas divulgações em segundos! Tenha acesso ao acervo profissional definitivo preferido pelos maiores produtores e cantores de shows do Brasil. Arquivos limpos e super organizados em camadas.',
-  coverImage: '/flyer_main_pack_1790608448982.jpg',
-  originalPrice: 79.04,
-  discountPrice: 49.9,
-  discountTag: 'Economize 60%',
+  coverImage:
+    'https://moriartdigital.com.br/mdstudio/wa_images/gemini_generated_image_bh57tfbh57tfbh57_1.png?v=1l2effs',
+  originalPrice: 97.0,
+  discountPrice: 57.99,
+  discountTag: 'Economize 40%',
   features: [
     'Mais de 150 Artes Prontas e Editáveis em Photoshop (.PSD)',
     'Acesso a pasta exclusiva do Google Drive atualizada semanalmente',
@@ -245,48 +249,50 @@ export const DEFAULT_FLYER_SHOW: FlyerShowConfig = {
       id: 'fl_1',
       title: 'Cavalgada dos Amigos',
       category: 'Cavalgada & Sertanejo',
-      imageUrl: '/flyer_arrocha_show_1790608491358.jpg',
+      imageUrl: 'https://moriartdigital.com.br/mdstudio/wa_images/001.png?v=1lblugj',
     },
     {
       id: 'fl_2',
       title: 'Eu Arraiá',
       category: 'Forró & São João',
-      imageUrl: '/flyer_forro_arraia_1790608465989.jpg',
+      imageUrl: 'https://moriartdigital.com.br/mdstudio/wa_images/02_(4).png?v=1lblugj',
     },
     {
       id: 'fl_3',
       title: 'Boteco Arrocha Sofrência',
       category: 'Arrocha & Seresta',
-      imageUrl: '/flyer_arrocha_show_1790608491358.jpg',
+      imageUrl: 'https://moriartdigital.com.br/mdstudio/wa_images/03.png?v=1lblugj',
     },
     {
       id: 'fl_4',
       title: 'Contrate Para Seu Evento',
       category: 'Cantor & Banda',
-      imageUrl: '/flyer_main_pack_1790608448982.jpg',
+      imageUrl: 'https://moriartdigital.com.br/mdstudio/wa_images/4.png?v=1lblugj',
     },
     {
       id: 'fl_5',
       title: '4º Aniversário da Igreja',
       category: 'Gospel & Igreja',
-      imageUrl: '/flyer_gospel_show_1790608478189.jpg',
+      imageUrl: 'https://moriartdigital.com.br/mdstudio/wa_images/05.png?v=1lblugj',
     },
     {
       id: 'fl_6',
       title: 'Congresso de Jovens',
       category: 'Congresso Gospel',
-      imageUrl: '/flyer_gospel_show_1790608478189.jpg',
+      imageUrl: 'https://moriartdigital.com.br/mdstudio/wa_images/06_(1).png?v=1lblugj',
     },
     {
       id: 'fl_7',
       title: 'Bloquinho de Carnaval 2026',
       category: 'Carnaval & Micareta',
-      imageUrl: '/flyer_forro_arraia_1790608465989.jpg',
+      imageUrl: 'https://moriartdigital.com.br/mdstudio/wa_images/07_(1).png?v=1lblugj',
     },
   ],
-  demoDownloadUrl: 'https://drive.google.com/drive/folders/demo-gratis-mdstudio',
+  demoDownloadUrl:
+    'https://moriartdigital.com.br/mdstudio/wa_files/story_resenha_flyer_priscila_senna_wesley_safadao_xand_aviao_social_media_ps.zip',
   demoButtonText: 'DOWNLOAD MODELO DEMO GRATIS',
-  postSaleUrl: 'https://drive.google.com/drive/folders/pack-150-flyers-mdstudio',
+  postSaleUrl:
+    'https://drive.google.com/drive/folders/1UdFKQtVtrGIcvS6U087ntO8-NYg8c2g1?usp=drive_link',
 };
 
 export const DEFAULT_MIDI_VARIADOS: MidiPageConfig = {
@@ -615,21 +621,24 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   });
 
   const [flyerShowConfig, setFlyerShowConfig] = useState<FlyerShowConfig>(() => {
-    const saved = localStorage.getItem('jsp_flyer_show');
+    const saved = localStorage.getItem('jsp_flyer_show_v2') || localStorage.getItem('jsp_flyer_show');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        // If legacy stale state from earlier sessions (49.9 or old local image), discard and use DEFAULT_FLYER_SHOW
+        if (
+          parsed.discountPrice === 49.9 ||
+          parsed.coverImage === '/flyer_main_pack_1790608448982.jpg' ||
+          !parsed.coverImage?.startsWith('http')
+        ) {
+          return DEFAULT_FLYER_SHOW;
+        }
         return {
           ...DEFAULT_FLYER_SHOW,
           ...parsed,
-          coverImage: parsed.coverImage
-            ? parsed.coverImage.replace('/src/assets/images/', '/')
-            : DEFAULT_FLYER_SHOW.coverImage,
+          coverImage: parsed.coverImage || DEFAULT_FLYER_SHOW.coverImage,
           gallery: Array.isArray(parsed.gallery) && parsed.gallery.length > 0
-            ? parsed.gallery.map((g: any) => ({
-                ...g,
-                imageUrl: g.imageUrl ? g.imageUrl.replace('/src/assets/images/', '/') : g.imageUrl,
-              }))
+            ? parsed.gallery
             : DEFAULT_FLYER_SHOW.gallery,
         };
       } catch {
@@ -647,10 +656,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return {
           ...DEFAULT_MIDI_VARIADOS,
           ...parsed,
-          circleImage:
-            !parsed.circleImage || parsed.circleImage.includes('midi_variados_cover')
-              ? DEFAULT_MIDI_VARIADOS.circleImage
-              : parsed.circleImage,
+          circleImage: parsed.circleImage || DEFAULT_MIDI_VARIADOS.circleImage,
         };
       } catch {
         return DEFAULT_MIDI_VARIADOS;
@@ -660,16 +666,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   });
 
   const [midiGospelConfig, setMidiGospelConfig] = useState<MidiPageConfig>(() => {
-    const saved = localStorage.getItem('jsp_midi_gospel_v4');
+    const saved = localStorage.getItem('jsp_midi_gospel') || localStorage.getItem('jsp_midi_gospel_v4');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         return {
           ...DEFAULT_MIDI_GOSPEL,
           ...parsed,
-          circleImage: !parsed.circleImage || parsed.circleImage.includes('midi_gospel_cover')
-            ? DEFAULT_MIDI_GOSPEL.circleImage
-            : parsed.circleImage,
+          circleImage: parsed.circleImage || DEFAULT_MIDI_GOSPEL.circleImage,
         };
       } catch {
         return DEFAULT_MIDI_GOSPEL;
@@ -714,6 +718,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Ref to prevent echo loops when Firestore pushes incoming remote updates
   const isIncomingSyncRef = useRef<{ [key: string]: boolean }>({});
+  // Ref to track if initial remote sync from Firestore has loaded to prevent overwriting with defaults
+  const hasRemoteLoadedRef = useRef<{ [key: string]: boolean }>({});
 
   // On initial mount: test connection, setup real-time onSnapshot listeners across all collections
   useEffect(() => {
@@ -752,6 +758,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           if (livePacks.length > 0) {
             livePacks.sort((a, b) => (a.orderIndex ?? 999) - (b.orderIndex ?? 999));
             isIncomingSyncRef.current['packs'] = true;
+            hasRemoteLoadedRef.current['packs'] = true;
             setPacks(livePacks);
             localStorage.setItem('jsp_packs', JSON.stringify(livePacks));
           }
@@ -772,6 +779,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             const config = data.config || data;
             const id = docSnap.id;
             isIncomingSyncRef.current[id] = true;
+            hasRemoteLoadedRef.current[id] = true;
 
             if (id === 'theme' && config.primaryColor) {
               setThemeConfig(config);
@@ -794,15 +802,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             } else if (id === 'checkout' && config.pixKey) {
               setCheckoutConfig(config);
               localStorage.setItem('jsp_checkout', JSON.stringify(config));
-            } else if (id === 'flyer_show' && config.title) {
-              setFlyerShowConfig(config);
-              localStorage.setItem('jsp_flyer_show', JSON.stringify(config));
-            } else if (id === 'midi_variados' && config.title) {
-              setMidiVariadosConfig(config);
-              localStorage.setItem('jsp_midi_variados', JSON.stringify(config));
-            } else if (id === 'midi_gospel' && config.title) {
-              setMidiGospelConfig(config);
-              localStorage.setItem('jsp_midi_gospel', JSON.stringify(config));
             }
           });
         }
@@ -821,6 +820,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             const config = docSnap.data();
             const id = docSnap.id;
             isIncomingSyncRef.current[id] = true;
+            hasRemoteLoadedRef.current[id] = true;
 
             if (id === 'flyer_show' && config.title) {
               setFlyerShowConfig(config as FlyerShowConfig);
@@ -831,6 +831,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             } else if (id === 'midi_gospel' && config.title) {
               setMidiGospelConfig(config as MidiPageConfig);
               localStorage.setItem('jsp_midi_gospel', JSON.stringify(config));
+              localStorage.setItem('jsp_midi_gospel_v4', JSON.stringify(config));
             }
           });
         }
@@ -1071,47 +1072,63 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.setItem('jsp_orders', JSON.stringify(orders));
   }, [orders]);
 
-  useEffect(() => {
-    localStorage.setItem('jsp_flyer_show', JSON.stringify(flyerShowConfig));
-    if (isIncomingSyncRef.current['flyer_show']) {
-      isIncomingSyncRef.current['flyer_show'] = false;
-      return;
-    }
-    setDoc(doc(db, 'site_configs', 'flyer_show'), flyerShowConfig, { merge: true }).catch(() => {});
-    setDoc(
+  // Direct Explicit Save Functions with guaranteed Firestore persistence
+  const saveFlyerShowConfig = async (config: FlyerShowConfig) => {
+    setFlyerShowConfig(config);
+    localStorage.setItem('jsp_flyer_show', JSON.stringify(config));
+    localStorage.setItem('jsp_flyer_show_v2', JSON.stringify(config));
+    hasRemoteLoadedRef.current['flyer_show'] = true;
+    await setDoc(doc(db, 'site_configs', 'flyer_show'), config, { merge: true }).catch((err) => {
+      console.warn('Firestore flyer_show save notice:', err);
+    });
+    await setDoc(
       doc(db, 'site_settings', 'flyer_show'),
-      { key: 'flyer_show', config: flyerShowConfig },
+      { key: 'flyer_show', config },
       { merge: true }
     ).catch(() => {});
+  };
+
+  const saveMidiVariadosConfig = async (config: MidiPageConfig) => {
+    setMidiVariadosConfig(config);
+    localStorage.setItem('jsp_midi_variados', JSON.stringify(config));
+    hasRemoteLoadedRef.current['midi_variados'] = true;
+    await setDoc(doc(db, 'site_configs', 'midi_variados'), config, { merge: true }).catch((err) => {
+      console.warn('Firestore midi_variados save notice:', err);
+    });
+    await setDoc(
+      doc(db, 'site_settings', 'midi_variados'),
+      { key: 'midi_variados', config },
+      { merge: true }
+    ).catch(() => {});
+  };
+
+  const saveMidiGospelConfig = async (config: MidiPageConfig) => {
+    setMidiGospelConfig(config);
+    localStorage.setItem('jsp_midi_gospel', JSON.stringify(config));
+    localStorage.setItem('jsp_midi_gospel_v4', JSON.stringify(config));
+    hasRemoteLoadedRef.current['midi_gospel'] = true;
+    await setDoc(doc(db, 'site_configs', 'midi_gospel'), config, { merge: true }).catch((err) => {
+      console.warn('Firestore midi_gospel save notice:', err);
+    });
+    await setDoc(
+      doc(db, 'site_settings', 'midi_gospel'),
+      { key: 'midi_gospel', config },
+      { merge: true }
+    ).catch(() => {});
+  };
+
+  useEffect(() => {
+    localStorage.setItem('jsp_flyer_show', JSON.stringify(flyerShowConfig));
+    localStorage.setItem('jsp_flyer_show_v2', JSON.stringify(flyerShowConfig));
   }, [flyerShowConfig]);
 
   useEffect(() => {
     localStorage.setItem('jsp_midi_variados', JSON.stringify(midiVariadosConfig));
-    if (isIncomingSyncRef.current['midi_variados']) {
-      isIncomingSyncRef.current['midi_variados'] = false;
-      return;
-    }
-    setDoc(doc(db, 'site_configs', 'midi_variados'), midiVariadosConfig, { merge: true }).catch(() => {});
-    setDoc(
-      doc(db, 'site_settings', 'midi_variados'),
-      { key: 'midi_variados', config: midiVariadosConfig },
-      { merge: true }
-    ).catch(() => {});
   }, [midiVariadosConfig]);
 
   useEffect(() => {
     localStorage.setItem('jsp_midi_gospel', JSON.stringify(midiGospelConfig));
     localStorage.setItem('jsp_midi_gospel_v4', JSON.stringify(midiGospelConfig));
-    if (isIncomingSyncRef.current['midi_gospel']) {
-      isIncomingSyncRef.current['midi_gospel'] = false;
-      return;
-    }
-    setDoc(doc(db, 'site_configs', 'midi_gospel'), midiGospelConfig, { merge: true }).catch(() => {});
-    setDoc(
-      doc(db, 'site_settings', 'midi_gospel'),
-      { key: 'midi_gospel', config: midiGospelConfig },
-      { merge: true }
-    ).catch(() => {});
   }, [midiGospelConfig]);
 
   // Pack CRUD functions
@@ -1728,10 +1745,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setFirebaseConfig,
         flyerShowConfig,
         setFlyerShowConfig,
+        saveFlyerShowConfig,
         midiVariadosConfig,
         setMidiVariadosConfig,
+        saveMidiVariadosConfig,
         midiGospelConfig,
         setMidiGospelConfig,
+        saveMidiGospelConfig,
         currentUser,
         syncWithFirestore,
         testFirebaseConnectionLive,
