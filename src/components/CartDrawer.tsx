@@ -34,6 +34,7 @@ interface CartDrawerProps {
   onRemoveItem: (packId: string) => void;
   onUpdateQuantity?: (packId: string, quantity: number) => void;
   onClearCart: () => void;
+  onOpenCheckout?: () => void;
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
@@ -43,6 +44,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onRemoveItem,
   onUpdateQuantity,
   onClearCart,
+  onOpenCheckout,
 }) => {
   const {
     cartConfig,
@@ -1111,7 +1113,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             <div className="p-4 border-t border-white/10 bg-[#12141a] space-y-2 shrink-0">
               <button
                 type="button"
-                onClick={() => setIsCheckingOut(true)}
+                onClick={() => {
+                  if (onOpenCheckout) {
+                    onClose();
+                    onOpenCheckout();
+                  } else {
+                    setIsCheckingOut(true);
+                  }
+                }}
                 className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm sm:text-base rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/20 active:scale-98 cursor-pointer"
               >
                 <span>Finalizar Compra</span>

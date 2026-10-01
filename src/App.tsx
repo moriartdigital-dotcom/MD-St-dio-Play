@@ -23,6 +23,7 @@ import { CustomerAreaModal } from './components/CustomerAreaModal';
 import { ExtraCategoryView } from './components/ExtraCategoryView';
 import { FlyerShowPage } from './components/FlyerShowPage';
 import { MidiPageView } from './components/MidiPageView';
+import { CheckoutModal } from './components/CheckoutModal';
 import { SearchX, Sparkles } from 'lucide-react';
 
 export default function App() {
@@ -54,6 +55,27 @@ export default function App() {
   // Drawers & Modals
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isCookieModalOpen, setIsCookieModalOpen] = useState(false);
+  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
+  const [checkoutInitialView, setCheckoutInitialView] = useState<'checkout' | 'success' | 'pending' | 'error'>('checkout');
+
+  // Handle direct payment routes (/pagamento/sucesso, /pagamento/pendente, /pagamento/erro, /checkout)
+  useEffect(() => {
+    const path = window.location.pathname.toLowerCase();
+    const hash = window.location.hash.toLowerCase();
+    if (path.includes('/pagamento/sucesso') || hash.includes('sucesso')) {
+      setCheckoutInitialView('success');
+      setIsCheckoutModalOpen(true);
+    } else if (path.includes('/pagamento/pendente') || hash.includes('pendente')) {
+      setCheckoutInitialView('pending');
+      setIsCheckoutModalOpen(true);
+    } else if (path.includes('/pagamento/erro') || hash.includes('erro')) {
+      setCheckoutInitialView('error');
+      setIsCheckoutModalOpen(true);
+    } else if (path.includes('/checkout') || hash.includes('checkout')) {
+      setCheckoutInitialView('checkout');
+      setIsCheckoutModalOpen(true);
+    }
+  }, []);
 
   // Toast feedback state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -410,6 +432,19 @@ export default function App() {
         onRemoveItem={handleRemoveCartItem}
         onUpdateQuantity={handleUpdateQuantity}
         onClearCart={handleClearCart}
+        onOpenCheckout={() => {
+          setCheckoutInitialView('checkout');
+          setIsCheckoutModalOpen(true);
+        }}
+      />
+
+      {/* Professional Mercado Pago Checkout Modal */}
+      <CheckoutModal
+        isOpen={isCheckoutModalOpen}
+        onClose={() => setIsCheckoutModalOpen(false)}
+        items={cartItems}
+        onClearCart={handleClearCart}
+        initialView={checkoutInitialView}
       />
 
       {/* Side Menu Drawer */}

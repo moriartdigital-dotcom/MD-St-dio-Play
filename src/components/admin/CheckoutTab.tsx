@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   Zap,
   MessageCircle,
+  Globe,
 } from 'lucide-react';
 
 export const CheckoutTab: React.FC = () => {
@@ -515,6 +516,35 @@ export const CheckoutTab: React.FC = () => {
                   ? 'O Access Token está injetado com segurança no servidor através da variável SECRET MERCADO_PAGO_ACCESS_TOKEN. O sistema já está apto a receber pagamentos reais via PIX e Cartão de Crédito.'
                   : 'Utilizado para gerar o QR Code PIX oficial e processar pagamentos via API do Mercado Pago.'}
               </span>
+            </div>
+
+            {/* Mercado Pago Webhook Information Box */}
+            <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-xs text-neutral-300 space-y-2">
+              <div className="flex items-center gap-2 font-bold text-blue-400">
+                <Globe className="w-4 h-4" />
+                <span>URL do Webhook Oficial do Mercado Pago</span>
+              </div>
+              <p className="text-[11px] text-neutral-400">
+                Cadastre esta URL no painel do Mercado Pago (Suas Aplicações &gt; Notificações Webhook):
+              </p>
+              <div className="flex items-center justify-between gap-2 bg-black/60 p-2.5 rounded-lg border border-white/10 font-mono text-[11px] text-white">
+                <span className="truncate select-all">{typeof window !== 'undefined' ? `${window.location.origin}/api/mercadopago/webhook` : 'https://seusite.com/api/mercadopago/webhook'}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== 'undefined') {
+                      navigator.clipboard.writeText(`${window.location.origin}/api/mercadopago/webhook`);
+                      showSaveNotice();
+                    }
+                  }}
+                  className="px-2 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] shrink-0 cursor-pointer"
+                >
+                  Copiar URL
+                </button>
+              </div>
+              <p className="text-[10px] text-neutral-500">
+                Evento obrigatório para marcar no Mercado Pago: <strong>Pagamentos (payments)</strong>.
+              </p>
             </div>
 
             {/* Installments configuration */}

@@ -175,8 +175,19 @@ export const CustomerAreaModal: React.FC = () => {
       })
     : [];
 
-  const completedOrders = userOrders.filter((o) => o.status === 'completed');
-  const pendingOrders = userOrders.filter((o) => o.status === 'pending');
+  const completedOrders = userOrders.filter(
+    (o) => o.status === 'completed' || o.payment_status === 'approved' || o.order_status === 'PAGAMENTO APROVADO'
+  );
+  const pendingOrders = userOrders.filter(
+    (o) =>
+      (o.status === 'pending' ||
+        o.payment_status === 'pending' ||
+        o.payment_status === 'in_process' ||
+        o.order_status === 'AGUARDANDO PAGAMENTO' ||
+        o.order_status === 'PAGAMENTO EM ANÁLISE') &&
+      o.status !== 'completed' &&
+      o.payment_status !== 'approved'
+  );
 
   // Extract packs with access granted from completed orders
   const authorizedPacks: { pack: PlaybackPack; order: Order }[] = [];
@@ -621,15 +632,21 @@ Acesso permanente aos arquivos multitrack na nuvem autorizado.`;
                     >
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-white">{ord.orderNumber}</span>
+                          <span className="text-xs font-bold text-white font-mono">{ord.orderNumber}</span>
                           <span
                             className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                              ord.status === 'completed'
+                              ord.status === 'completed' || ord.payment_status === 'approved' || ord.order_status === 'PAGAMENTO APROVADO'
                                 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                : ord.status === 'cancelled' || ord.payment_status === 'rejected' || ord.order_status === 'PAGAMENTO REJEITADO'
+                                ? 'bg-red-500/20 text-red-400 border border-red-500/30'
                                 : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                             }`}
                           >
-                            {ord.status === 'completed' ? 'Confirmado' : 'Pendente'}
+                            {ord.status === 'completed' || ord.payment_status === 'approved' || ord.order_status === 'PAGAMENTO APROVADO'
+                              ? 'PAGO'
+                              : ord.status === 'cancelled' || ord.payment_status === 'rejected' || ord.order_status === 'PAGAMENTO REJEITADO'
+                              ? 'PAGAMENTO NÃO APROVADO'
+                              : 'AGUARDANDO PAGAMENTO'}
                           </span>
                         </div>
                         <p className="text-[11px] text-neutral-400 mt-1">

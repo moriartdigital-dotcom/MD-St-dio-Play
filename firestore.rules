@@ -41,11 +41,8 @@ service cloud.firestore {
     }
 
     function isValidOrder(data) {
-      return data.customerName is string && data.customerName.size() > 0 && data.customerName.size() <= 100
-        && data.customerEmail is string && data.customerEmail.size() > 0 && data.customerEmail.size() <= 120
-        && data.total is number && data.total >= 0
-        && data.paymentMethod in ['pix', 'card']
-        && data.status in ['completed', 'pending', 'cancelled'];
+      return (data.customerName is string || data.customer_name is string)
+        && data.total is number && data.total >= 0;
     }
 
     function isValidSetting(data) {
@@ -62,11 +59,17 @@ service cloud.firestore {
 
     // Customer Checkout Orders
     match /orders/{orderId} {
-      allow create: if isValidId(orderId) && isValidOrder(incoming());
-      allow get: if isValidId(orderId);
-      allow list: if true;
-      allow update: if isValidId(orderId) && isValidOrder(incoming());
+      allow create: if isValidId(orderId);
+      allow get, list: if true;
+      allow update: if isValidId(orderId);
       allow delete: if isValidId(orderId);
+    }
+
+    // Mercado Pago Payments Ledger
+    match /payments/{paymentId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(paymentId);
+      allow delete: if isValidId(paymentId);
     }
 
     // Dynamic Site Settings (Theme, Logos, Menus, Banners, Checkout)

@@ -121,12 +121,24 @@ export interface Order {
   customerEmail: string;
   customerPhone?: string;
   customerCpf?: string;
+  customer_id?: string;
+  external_reference?: string;
   items: OrderItem[];
   subtotal: number;
   discount: number;
   total: number;
-  paymentMethod: 'pix' | 'card';
+  paymentMethod: 'pix' | 'card' | 'credit_card';
+  payment_method?: 'pix' | 'card' | 'credit_card';
   status: 'completed' | 'pending' | 'cancelled';
+  payment_status?: 'pending' | 'approved' | 'in_process' | 'rejected' | 'cancelled' | 'refunded' | 'charged_back';
+  order_status?:
+    | 'AGUARDANDO PAGAMENTO'
+    | 'PAGAMENTO EM ANÁLISE'
+    | 'PAGAMENTO APROVADO'
+    | 'PAGAMENTO REJEITADO'
+    | 'PAGAMENTO CANCELADO'
+    | 'PAGAMENTO ESTORNADO';
+  payment_id?: string;
   pixPayload?: string;
   pixQrCodeUrl?: string;
   mercadoPagoPaymentId?: string;
@@ -134,6 +146,23 @@ export interface Order {
   cardLast4?: string;
   cardBrand?: string;
   installments?: number;
+  post_sale_urls?: string[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface PaymentRecord {
+  id: string;
+  order_id: string;
+  mercado_pago_payment_id: string;
+  external_reference?: string;
+  method: string;
+  amount: number;
+  status: string;
+  status_detail?: string;
+  transaction_date: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface CustomerUser {
