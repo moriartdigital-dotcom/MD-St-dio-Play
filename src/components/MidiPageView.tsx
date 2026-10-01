@@ -215,14 +215,13 @@ export const MidiPageView: React.FC<MidiPageViewProps> = ({
                 {config.subHighlight2 || config.priceLabel || 'VALOR ESPECIAL DA COLETÂNEA'}
               </p>
 
-              {config.showPrice && (
-                <div className="flex items-center justify-center gap-2 pt-1 font-mono">
-                  <span className={`text-2xl sm:text-3xl font-black ${themeHighlightColor}`}>
-                    {formatBRL(config.price)}
-                  </span>
-                  <span className="text-xs text-neutral-400">{config.priceSubtext}</span>
-                </div>
-              )}
+              {/* Preço Especial Sempre Visível conforme solicitado */}
+              <div className="flex items-center justify-center gap-2 pt-1 font-mono">
+                <span className={`text-2xl sm:text-3xl font-black ${themeHighlightColor} drop-shadow-[0_0_15px_rgba(250,204,21,0.4)]`}>
+                  {formatBRL(config.price || 57.99)}
+                </span>
+                <span className="text-xs text-neutral-400 font-semibold">{config.priceSubtext || '/ pix ou cartão'}</span>
+              </div>
             </div>
 
             {/* Audio Preview Box with matching Border */}
@@ -291,8 +290,10 @@ export const MidiPageView: React.FC<MidiPageViewProps> = ({
                 onClick={handleBuyMidiPack}
                 className="w-full max-w-md py-4 sm:py-5 px-8 rounded-2xl bg-[#1ec75f] hover:bg-[#18b554] text-white font-black text-base sm:text-lg uppercase tracking-wider flex flex-col items-center justify-center leading-tight cursor-pointer shadow-[0_0_35px_rgba(30,199,95,0.45)] hover:shadow-[0_0_50px_rgba(30,199,95,0.7)] active:scale-95 transition-all"
               >
-                <span>{isInCart ? 'PRODUTO NO CARRINHO' : 'ADQUIRA A COLETÂNEA'}</span>
-                <span className="mt-0.5">{isInCart ? '(ADICIONAR MAIS UM)' : 'COMPLETA'}</span>
+                <span>{isInCart ? 'PRODUTO NO CARRINHO' : 'ADQUIRA A COLETÂNEA COMPLETA'}</span>
+                <span className="mt-0.5 text-xs sm:text-sm font-extrabold text-white/95">
+                  {isInCart ? '(ADICIONAR MAIS UM)' : `POR APENAS ${formatBRL(config.price || 57.99)}`}
+                </span>
               </button>
             </div>
 

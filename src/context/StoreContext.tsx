@@ -306,15 +306,18 @@ export const DEFAULT_MIDI_VARIADOS: MidiPageConfig = {
   circleBadgeText: 'MIDI VARIADOS',
   bottomPillText: 'MILHARES ARQUIVOS MIDI PROFISSIONAIS',
   priceLabel: 'VALOR ESPECIAL DA COLETÂNEA',
-  price: 149.9,
+  price: 57.99,
   priceSubtext: '/ pix ou cartão',
-  showPrice: false,
+  showPrice: true,
   buttonText: 'ADQUIRA A COLETÂNEA COMPLETA',
   audioPreviewTitle: 'DEMONSTRAÇÃO DE ÁUDIO — MIDI VARIADOS',
   audioPreviewSubtitle: 'Clique para ouvir uma amostra dos ritmos variados',
-  audioPreviewUrl: 'https://cdn.freesound.org/previews/250/250856_4486188-lq.mp3',
-  postSaleUrl: 'https://drive.google.com/drive/folders/mega-pack-midi-variados',
-  tracklistUrl: '',
+  audioPreviewUrl:
+    'https://moriartdigital.com.br/mdstudio/wa_files/(x)cam.%20amarelo%20dodge%20rom%20s.%20disfarcado.mp3',
+  postSaleUrl:
+    'https://drive.google.com/drive/folders/1ns6pguW_lxaQdqrn7RdIBwBWVr36VJkm?usp=drive_link',
+  tracklistUrl:
+    'https://moriartdigital.com.br/mdstudio/wa_files/midis%20para%20apresentacao.docx',
   tracklistButtonText: 'VER LISTA COMPLETA DAS MÚSICAS',
   highlights: [
     'Compatível com Teclados Korg, Yamaha, Roland, Casio e Nord',
@@ -332,19 +335,23 @@ export const DEFAULT_MIDI_GOSPEL: MidiPageConfig = {
     'Tenha acesso a uma coleção completa de arquivos MIDI GOSPEL, cuidadosamente organizada para músicos, tecladistas e produtores.\n\nChega de comprar MIDIs separados por preços elevados. Tenha tudo reunido em uma única coletânea e faça o download de forma rápida, prática e organizada.',
   subHighlight1: 'Centenas de MIDIs GOSPEL em um único pacote!',
   subHighlight2: 'VALOR ESPECIAL DA COLETÂNEA',
-  circleImage: '/midi_gospel_art.jpg',
+  circleImage:
+    'https://moriartdigital.com.br/mdstudio/wa_images/watermarked_img_15007118089605638878.jpg?v=1lbdtms',
   circleBadgeText: 'GOSPEL MIDI PRO',
   bottomPillText: 'MILHARES ARQUIVOS MIDI PROFISSIONAIS',
   priceLabel: 'VALOR ESPECIAL DA COLETÂNEA',
-  price: 149.9,
+  price: 57.99,
   priceSubtext: '/ pix ou cartão',
-  showPrice: false,
+  showPrice: true,
   buttonText: 'ADQUIRA A COLETÂNEA COMPLETA',
   audioPreviewTitle: 'DEMONSTRAÇÃO DE ÁUDIO — MIDI GOSPEL',
   audioPreviewSubtitle: 'Clique para ouvir uma amostra dos louvores e adoração',
-  audioPreviewUrl: 'https://cdn.freesound.org/previews/464/464902_9961300-lq.mp3',
-  postSaleUrl: 'https://drive.google.com/drive/folders/mega-pack-midi-gospel',
-  tracklistUrl: '',
+  audioPreviewUrl:
+    'https://moriartdigital.com.br/mdstudio/wa_files/(x)cam.%20amarelo%20dodge%20rom%20s.%20disfarcado.mp3',
+  postSaleUrl:
+    'https://drive.google.com/drive/folders/1ns6pguW_lxaQdqrn7RdIBwBWVr36VJkm?usp=drive_link',
+  tracklistUrl:
+    'https://moriartdigital.com.br/mdstudio/wa_files/midis%20para%20apresentacao.docx',
   tracklistButtonText: 'VER LISTA COMPLETA DAS MÚSICAS',
   highlights: [
     'Repertório completo de Adoração, Celebração e Harpa Cristã',
@@ -649,10 +656,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   });
 
   const [midiVariadosConfig, setMidiVariadosConfig] = useState<MidiPageConfig>(() => {
-    const saved = localStorage.getItem('jsp_midi_variados');
+    const saved = localStorage.getItem('jsp_midi_variados_v2') || localStorage.getItem('jsp_midi_variados');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        if (parsed.price === 149.9 || !parsed.tracklistUrl) {
+          return DEFAULT_MIDI_VARIADOS;
+        }
         return {
           ...DEFAULT_MIDI_VARIADOS,
           ...parsed,
@@ -666,10 +676,21 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   });
 
   const [midiGospelConfig, setMidiGospelConfig] = useState<MidiPageConfig>(() => {
-    const saved = localStorage.getItem('jsp_midi_gospel') || localStorage.getItem('jsp_midi_gospel_v4');
+    const saved =
+      localStorage.getItem('jsp_midi_gospel_v5') ||
+      localStorage.getItem('jsp_midi_gospel') ||
+      localStorage.getItem('jsp_midi_gospel_v4');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        // If legacy stale state from earlier sessions (149.9 or local image), discard and use DEFAULT_MIDI_GOSPEL
+        if (
+          parsed.price === 149.9 ||
+          parsed.circleImage === '/midi_gospel_art.jpg' ||
+          !parsed.circleImage?.startsWith('http')
+        ) {
+          return DEFAULT_MIDI_GOSPEL;
+        }
         return {
           ...DEFAULT_MIDI_GOSPEL,
           ...parsed,
@@ -828,10 +849,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             } else if (id === 'midi_variados' && config.title) {
               setMidiVariadosConfig(config as MidiPageConfig);
               localStorage.setItem('jsp_midi_variados', JSON.stringify(config));
+              localStorage.setItem('jsp_midi_variados_v2', JSON.stringify(config));
             } else if (id === 'midi_gospel' && config.title) {
               setMidiGospelConfig(config as MidiPageConfig);
               localStorage.setItem('jsp_midi_gospel', JSON.stringify(config));
               localStorage.setItem('jsp_midi_gospel_v4', JSON.stringify(config));
+              localStorage.setItem('jsp_midi_gospel_v5', JSON.stringify(config));
             }
           });
         }
@@ -1091,6 +1114,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const saveMidiVariadosConfig = async (config: MidiPageConfig) => {
     setMidiVariadosConfig(config);
     localStorage.setItem('jsp_midi_variados', JSON.stringify(config));
+    localStorage.setItem('jsp_midi_variados_v2', JSON.stringify(config));
     hasRemoteLoadedRef.current['midi_variados'] = true;
     await setDoc(doc(db, 'site_configs', 'midi_variados'), config, { merge: true }).catch((err) => {
       console.warn('Firestore midi_variados save notice:', err);
@@ -1106,6 +1130,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setMidiGospelConfig(config);
     localStorage.setItem('jsp_midi_gospel', JSON.stringify(config));
     localStorage.setItem('jsp_midi_gospel_v4', JSON.stringify(config));
+    localStorage.setItem('jsp_midi_gospel_v5', JSON.stringify(config));
     hasRemoteLoadedRef.current['midi_gospel'] = true;
     await setDoc(doc(db, 'site_configs', 'midi_gospel'), config, { merge: true }).catch((err) => {
       console.warn('Firestore midi_gospel save notice:', err);
