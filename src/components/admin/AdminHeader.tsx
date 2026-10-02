@@ -11,7 +11,6 @@ import {
   ExternalLink,
   Download,
   Upload,
-  RotateCcw,
   ShieldCheck,
   CheckCircle2,
   LogOut,
@@ -46,7 +45,6 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
     firebaseConfig,
     checkoutConfig,
     exportConfigBackup,
-    resetToDefaults,
     adminCredentials,
     logoutAdmin,
     logoutAdminGoogle,
@@ -73,10 +71,6 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
     { id: 'firebase' as AdminTab, label: 'Integração Firebase', icon: Flame },
     { id: 'orders' as AdminTab, label: 'Vendas & Pedidos', icon: ShoppingBag },
   ];
-
-  const handleReset = () => {
-    resetToDefaults();
-  };
 
   return (
     <header className="sticky top-0 z-40 bg-[#0d0e12]/95 border-b border-white/10 backdrop-blur-md">
@@ -114,7 +108,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
           </div>
         </div>
 
-        {/* Right Actions: Back to Store, Export JSON, Reset */}
+        {/* Right Actions: Back to Store, Export JSON */}
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -124,16 +118,6 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
           >
             <Download className="w-3.5 h-3.5" />
             <span>Backup JSON</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleReset}
-            title="Restaurar dados de fábrica"
-            className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-red-500/20 hover:text-red-400 border border-white/10 text-neutral-400 transition-colors cursor-pointer text-xs"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Resetar</span>
           </button>
 
           <button

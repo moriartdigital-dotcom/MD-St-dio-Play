@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../context/StoreContext';
 import { PlaybackPack, CartItem } from '../types';
+import { isValidCPF } from '../utils/cpfValidator';
 import QRCode from 'qrcode';
 import {
   X,
@@ -65,7 +66,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   );
 
   // Payment Method: 'pix' | 'credit_card'
-  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit_card'>('pix');
+  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit_card'>('credit_card');
 
   // Customer Fields
   const [customerName, setCustomerName] = useState('');
@@ -74,18 +75,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [customerCpf, setCustomerCpf] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Credit Card Fields
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardHolder, setCardHolder] = useState('');
-  const [cardExp, setCardExp] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
-  const [installments, setInstallments] = useState(1);
-  const [cardBrand, setCardBrand] = useState<string>('master');
-
-  // Processing & Button States
-  // 'idle' | 'processing' | 'waiting_confirmation' | 'approved'
+  // Processing & Verification States
   const [buttonState, setButtonState] = useState<'idle' | 'processing' | 'waiting_confirmation' | 'approved'>('idle');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   // PIX State
   const [pixQrCode, setPixQrCode] = useState<string | null>(null);
@@ -109,6 +102,77 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const pollIntervalRef = useRef<any>(null);
   const timerIntervalRef = useRef<any>(null);
 
+  // Check URL parameters when returning from Mercado Pago Checkout Pro
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const paymentId = urlParams.get('payment_id') || urlParams.get('collection_id');
+    const extRef = urlParams.get('external_reference');
+    const statusParam = urlParams.get('status') || urlParams.get('collection_status');
+    const path = window.location.pathname.toLowerCase();
+
+    const isSuccessRoute = path.includes('/pagamento/sucesso') || statusParam === 'approved';
+    const isPendingRoute = path.includes('/pagamento/pendente') || statusParam === 'pending';
+    const isErrorRoute = path.includes('/pagamento/erro') || statusParam === 'rejected' || statusParam === 'failure';
+    const isCancelRoute = path.includes('/pagamento/cancelado') || statusParam === 'null';
+
+    if (isSuccessRoute) {
+      setViewState('success');
+      verifyPaymentOnBackend(paymentId, extRef);
+    } else if (isPendingRoute) {
+      setViewState('pending');
+      if (paymentId || extRef) {
+        verifyPaymentOnBackend(paymentId, extRef);
+      }
+    } else if (isErrorRoute) {
+      setViewState('error');
+    } else if (isCancelRoute) {
+      setViewState('checkout');
+      setFormError('Pagamento cancelado no Mercado Pago. Você pode tentar novamente quando desejar.');
+    }
+  }, [isOpen]);
+
+  const verifyPaymentOnBackend = async (paymentId: string | null, externalReference: string | null) => {
+    setIsVerifying(true);
+    try {
+      const res = await fetch('/api/mercadopago/verify-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentId, externalReference }),
+      });
+      const data = await res.json();
+
+      if (data.verified && data.order) {
+        setCompletedOrder({
+          orderId: data.order.id || data.externalReference || externalReference || '#ORD-CONFIRMADO',
+          total: data.amount || data.order.total || totalAmount,
+          paymentMethod: 'Cartão de Crédito (Mercado Pago)',
+          date: new Date().toLocaleDateString('pt-BR'),
+          items: data.order.items || items.map((i) => i.pack),
+          postSaleUrls: data.order.post_sale_urls || [],
+        });
+
+        // Register in local StoreContext
+        addOrder({
+          ...data.order,
+          status: 'completed',
+          payment_status: 'approved',
+          order_status: 'PAGAMENTO APROVADO',
+        });
+
+        if (data.order.customerPhone) {
+          setPendingWhatsAppPhone(data.order.customerPhone);
+          loginCustomerDirectWithPhone(data.order.customerPhone).catch(() => {});
+        }
+      }
+    } catch (err) {
+      console.warn('Notice verifying order:', err);
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
   // Calculate Cart Total (unit prices)
   const totalAmount = items.reduce((acc, item) => {
     const pack = item.pack;
@@ -119,17 +183,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const formatBRL = (val: number) => {
     return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
-
-  // Detect card brand automatically
-  useEffect(() => {
-    const clean = cardNumber.replace(/\D/g, '');
-    if (/^4/.test(clean)) setCardBrand('visa');
-    else if (/^(5[1-5]|2[2-7])/.test(clean)) setCardBrand('mastercard');
-    else if (/^(4011|4389|4514|4576|5041|5066|5067|6277|6362|6363|650|6516|6550)/.test(clean)) setCardBrand('elo');
-    else if (/^(34|37)/.test(clean)) setCardBrand('amex');
-    else if (/^(3841|60)/.test(clean)) setCardBrand('hipercard');
-    else setCardBrand('mastercard');
-  }, [cardNumber]);
 
   // Phone masking: (XX) XXXXX-XXXX
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -157,24 +210,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     if (formError) setFormError(null);
   };
 
-  // Card number masking: 0000 0000 0000 0000
-  const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/\D/g, '').slice(0, 16);
-    const parts = raw.match(/.{1,4}/g) || [];
-    setCardNumber(parts.join(' '));
-    if (formError) setFormError(null);
-  };
-
-  // Expiration masking: MM/AA
-  const handleCardExpChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let raw = e.target.value.replace(/\D/g, '').slice(0, 4);
-    if (raw.length >= 3) {
-      raw = `${raw.slice(0, 2)}/${raw.slice(2)}`;
-    }
-    setCardExp(raw);
-    if (formError) setFormError(null);
-  };
-
   // Validate customer inputs
   const validateCustomer = (): boolean => {
     if (!customerName.trim() || customerName.trim().length < 3) {
@@ -192,8 +227,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       return false;
     }
     const cleanCpf = customerCpf.replace(/\D/g, '');
-    if (cleanCpf.length !== 11) {
-      setFormError('O CPF deve conter exatamente 11 dígitos.');
+    if (!cleanCpf || !isValidCPF(cleanCpf)) {
+      setFormError('Por favor, informe um CPF válido e existente.');
       return false;
     }
     setFormError(null);
@@ -275,83 +310,23 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   };
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // 2. Process Credit Card (Official MercadoPago.js v2 SDK Tokenization)
+  // 2. Checkout Pro Mercado Pago (Ambiente Seguro Oficial)
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  const handleProcessCard = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCheckoutPro = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!validateCustomer()) return;
-
-    const cleanCard = cardNumber.replace(/\D/g, '');
-    if (cleanCard.length < 13) {
-      setFormError('Informe um número de cartão de crédito válido.');
-      return;
-    }
-    if (!cardHolder.trim()) {
-      setFormError('Nome do titular conforme impresso no cartão é obrigatório.');
-      return;
-    }
-    if (!cardExp.trim() || !cardExp.includes('/')) {
-      setFormError('Validade do cartão deve ser no formato MM/AA.');
-      return;
-    }
-    const cleanCvv = cardCvv.replace(/\D/g, '');
-    if (cleanCvv.length < 3) {
-      setFormError('Código de segurança (CVV) inválido.');
-      return;
-    }
 
     setIsProcessing(true);
     setButtonState('processing');
     setFormError(null);
 
     try {
-      const [expMonthStr, expYearStr] = cardExp.split('/');
-      const expMonth = Number(expMonthStr);
-      const expYear = Number(expYearStr.length === 2 ? `20${expYearStr}` : expYearStr);
       const cleanCpf = customerCpf.replace(/\D/g, '');
 
-      let cardToken: string | null = null;
-      let issuerId: string | undefined = undefined;
-      let paymentMethodId: string = cardBrand === 'mastercard' ? 'master' : cardBrand;
-
-      // Check if official MercadoPago.js v2 SDK is loaded in browser
-      if (typeof window !== 'undefined' && window.MercadoPago) {
-        try {
-          const pkRes = await fetch('/api/mercadopago/public-key');
-          const pkData = await pkRes.json();
-          const publicKey = pkData.publicKey || checkoutConfig.mercadoPagoPublicKey;
-
-          if (publicKey && publicKey.length > 10) {
-            const mp = new window.MercadoPago(publicKey);
-            const tokenResult = await mp.createCardToken({
-              cardNumber: cleanCard,
-              cardholderName: cardHolder.trim(),
-              cardExpirationMonth: String(expMonth).padStart(2, '0'),
-              cardExpirationYear: String(expYear),
-              securityCode: cleanCvv,
-              identificationType: 'CPF',
-              identificationNumber: cleanCpf,
-            });
-
-            if (tokenResult?.id) {
-              cardToken = tokenResult.id;
-            }
-          }
-        } catch (sdkErr) {
-          console.warn('Notice: Client SDK tokenization fallback to server tokenization:', sdkErr);
-        }
-      }
-
-      setButtonState('waiting_confirmation');
-
-      // Send to Backend
-      const response = await fetch('/api/mercadopago/create-payment', {
+      const response = await fetch('/api/mercadopago/create-checkout-pro', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: totalAmount,
-          paymentMethodType: 'credit_card',
-          description: `MD Stúdio Play - ${items.map((i) => i.pack.title).join(', ')}`.slice(0, 100),
           payer: {
             name: customerName.trim(),
             email: customerEmail.trim(),
@@ -361,39 +336,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           items: items.map((i) => ({
             id: i.pack.id,
             title: i.pack.title,
-            quantity: i.quantity,
-            unit_price: i.pack.discountPrice || 57.99,
+            quantity: i.quantity || 1,
+            unit_price: Number(i.pack.discountPrice ?? 57.99),
             postSaleUrl: i.pack.postSaleUrl,
+            coverImage: i.pack.image,
           })),
-          card: {
-            token: cardToken,
-            cardNumber: cleanCard,
-            cardHolder: cardHolder.trim(),
-            cardExp,
-            cvv: cleanCvv,
-            installments,
-            brand: paymentMethodId,
-            issuer_id: issuerId,
-          },
         }),
       });
 
       const data = await response.json();
 
-      if (data.success && data.status === 'approved') {
-        setButtonState('approved');
-        const postSaleUrls = data.postSaleUrls || items.map((i) => i.pack.postSaleUrl).filter(Boolean);
-
-        setCompletedOrder({
-          orderId: data.orderId,
-          total: data.totalAmount || totalAmount,
-          paymentMethod: 'Cartão de Crédito',
-          date: new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-          items: items.map((i) => i.pack),
-          postSaleUrls,
-        });
-
-        // Register in local StoreContext
+      if (data.success && data.checkout_url) {
+        // Save pending order locally in context
         addOrder({
           customerName: customerName.trim(),
           customerEmail: customerEmail.trim(),
@@ -404,45 +358,29 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           discount: 0,
           total: totalAmount,
           paymentMethod: 'card',
-          status: 'completed',
-          mercadoPagoPaymentId: data.paymentId,
-          cardBrand: cardBrand.toUpperCase(),
-          cardLast4: cleanCard.slice(-4),
-          installments,
+          status: 'pending',
+          external_reference: data.orderId,
         });
 
-        // Authenticate customer WhatsApp session
+        // Set customer WhatsApp session
         setPendingWhatsAppPhone(customerPhone);
         loginCustomerDirectWithPhone(customerPhone).catch(() => {});
+
+        // Clear cart
         onClearCart();
 
-        setTimeout(() => {
-          setViewState('success');
-        }, 800);
-      } else if (data.success && (data.status === 'in_process' || data.status === 'pending')) {
-        setCompletedOrder({
-          orderId: data.orderId,
-          total: data.totalAmount || totalAmount,
-          paymentMethod: 'Cartão de Crédito',
-          date: new Date().toLocaleDateString('pt-BR'),
-          items: items.map((i) => i.pack),
-          postSaleUrls: [],
-        });
-        setViewState('pending');
+        // Redirect directly to official Mercado Pago Checkout Pro
+        window.location.href = data.checkout_url;
       } else {
-        setFormError(
-          data.error ||
-          data.details?.message ||
-          'Cartão recusado pela operadora. Verifique os dados ou utilize o PIX.'
-        );
+        setFormError(data.error || 'Não foi possível iniciar o pagamento. Tente novamente.');
+        setIsProcessing(false);
         setButtonState('idle');
       }
     } catch (err: any) {
-      console.error('Erro no processamento do cartão:', err);
-      setFormError('Erro ao processar transação com cartão. Verifique seus dados.');
-      setButtonState('idle');
-    } finally {
+      console.error('Erro ao iniciar Checkout Pro:', err);
+      setFormError('Não foi possível iniciar o pagamento. Tente novamente.');
       setIsProcessing(false);
+      setButtonState('idle');
     }
   };
 
@@ -673,7 +611,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
                   <div>
                     <label className="block text-[11px] font-semibold text-neutral-400 mb-1">
-                      CPF (Exigido pelo Banco/BACEN) *
+                      CPF (Exigido pelo Banco) *
                     </label>
                     <input
                       type="text"
@@ -768,121 +706,62 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </div>
               )}
 
-              {/* Credit Card Form & Action Button */}
+              {/* Credit Card — Official Mercado Pago Checkout Pro (Ambiente Seguro Externo) */}
               {paymentMethod === 'credit_card' && (
-                <form onSubmit={handleProcessCard} className="space-y-4 pt-1">
-                  <div className="bg-[#14161c] border border-white/[0.08] rounded-2xl p-4 sm:p-5 space-y-3.5">
-                    <div className="flex items-center justify-between border-b border-white/[0.08] pb-2">
-                      <span className="text-xs font-bold text-neutral-300">Dados do Cartão de Crédito</span>
-                      <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                        {cardBrand.toUpperCase()}
-                      </span>
+                <div className="space-y-4 pt-1">
+                  <div className="p-5 sm:p-6 rounded-2xl bg-[#14161c] border border-blue-500/30 text-center space-y-4 shadow-xl">
+                    <div className="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center mx-auto text-blue-400 shadow-[0_0_25px_rgba(59,130,246,0.2)]">
+                      <ShieldCheck className="w-8 h-8" />
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-semibold text-neutral-400 mb-1">
-                        Número do Cartão *
-                      </label>
-                      <input
-                        type="text"
-                        value={cardNumber}
-                        onChange={handleCardNumberChange}
-                        placeholder="0000 0000 0000 0000"
-                        className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-blue-400 transition-colors font-mono tracking-wider"
-                      />
+                      <h4 className="text-base sm:text-lg font-black text-white">
+                        Pagamento seguro pelo Mercado Pago
+                      </h4>
+                      <p className="text-xs text-neutral-300 mt-1 max-w-sm mx-auto leading-relaxed">
+                        Você será redirecionado para o ambiente seguro do <strong>Mercado Pago</strong> para realizar o pagamento com seu cartão de crédito com total proteção.
+                      </p>
                     </div>
 
-                    <div>
-                      <label className="block text-[11px] font-semibold text-neutral-400 mb-1">
-                        Nome Impresso no Cartão *
-                      </label>
-                      <input
-                        type="text"
-                        value={cardHolder}
-                        onChange={(e) => setCardHolder(e.target.value.toUpperCase())}
-                        placeholder="NOME COMO ESTÁ NO CARTÃO"
-                        className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-blue-400 transition-colors uppercase"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[11px] font-semibold text-neutral-400 mb-1">
-                          Validade (MM/AA) *
-                        </label>
-                        <input
-                          type="text"
-                          value={cardExp}
-                          onChange={handleCardExpChange}
-                          placeholder="12/28"
-                          className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-blue-400 transition-colors font-mono"
-                        />
+                    <div className="grid grid-cols-2 gap-2 text-left bg-black/40 p-3 rounded-xl border border-white/5 text-[11px] text-neutral-300">
+                      <div className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                        <span>Parcele em até 12x</span>
                       </div>
-
-                      <div>
-                        <label className="block text-[11px] font-semibold text-neutral-400 mb-1">
-                          Código de Segurança (CVV) *
-                        </label>
-                        <input
-                          type="password"
-                          maxLength={4}
-                          value={cardCvv}
-                          onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, ''))}
-                          placeholder="123"
-                          className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-blue-400 transition-colors font-mono"
-                        />
+                      <div className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                        <span>100% Criptografado</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                        <span>Todas as Bandeiras</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                        <span>Liberação Imediata</span>
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-[11px] font-semibold text-neutral-400 mb-1">
-                        Parcelas Disponíveis *
-                      </label>
-                      <select
-                        value={installments}
-                        onChange={(e) => setInstallments(Number(e.target.value))}
-                        className="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-blue-400 transition-colors cursor-pointer"
-                      >
-                        <option value={1}>1x de {formatBRL(totalAmount)} (sem juros)</option>
-                        <option value={2}>2x de {formatBRL(totalAmount / 2)} (sem juros)</option>
-                        <option value={3}>3x de {formatBRL(totalAmount / 3)} (sem juros)</option>
-                        <option value={4}>4x de {formatBRL((totalAmount * 1.05) / 4)}</option>
-                        <option value={6}>6x de {formatBRL((totalAmount * 1.08) / 6)}</option>
-                        <option value={10}>10x de {formatBRL((totalAmount * 1.12) / 10)}</option>
-                        <option value={12}>12x de {formatBRL((totalAmount * 1.15) / 12)}</option>
-                      </select>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCheckoutPro()}
+                      disabled={isProcessing}
+                      className="w-full py-4 rounded-2xl bg-[#009ee3] hover:bg-[#008ac7] text-white font-black text-sm sm:text-base uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(0,158,227,0.4)] transition-all cursor-pointer active:scale-98 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {isProcessing ? (
+                        <>
+                          <RefreshCw className="w-5 h-5 animate-spin" />
+                          <span>CRIANDO PAGAMENTO...</span>
+                        </>
+                      ) : (
+                        <>
+                          <ExternalLink className="w-5 h-5" />
+                          <span>CONTINUAR PARA PAGAMENTO — {formatBRL(totalAmount)}</span>
+                        </>
+                      )}
+                    </button>
                   </div>
-
-                  {/* Multi-state button matching requirement 8 */}
-                  <button
-                    type="submit"
-                    disabled={isProcessing}
-                    className="w-full py-4 rounded-2xl bg-[#1ec75f] hover:bg-[#18b554] text-white font-black text-base uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(30,199,95,0.4)] transition-all cursor-pointer active:scale-98 disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {buttonState === 'processing' ? (
-                      <>
-                        <RefreshCw className="w-5 h-5 animate-spin" />
-                        <span>PROCESSANDO...</span>
-                      </>
-                    ) : buttonState === 'waiting_confirmation' ? (
-                      <>
-                        <Clock className="w-5 h-5 animate-spin" />
-                        <span>AGUARDANDO CONFIRMAÇÃO...</span>
-                      </>
-                    ) : buttonState === 'approved' ? (
-                      <>
-                        <CheckCircle2 className="w-5 h-5 text-white" />
-                        <span>PAGAMENTO APROVADO ✓</span>
-                      </>
-                    ) : (
-                      <>
-                        <Lock className="w-4 h-4" />
-                        <span>PAGAR AGORA {formatBRL(totalAmount)}</span>
-                      </>
-                    )}
-                  </button>
-                </form>
+                </div>
               )}
             </div>
           )}
@@ -976,27 +855,43 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </div>
 
               <div>
-                <h3 className="text-xl sm:text-2xl font-black text-white">✓ PAGAMENTO APROVADO!</h3>
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-xs font-black uppercase tracking-wider mb-2">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>PAGAMENTO APROVADO · PRODUTO LIBERADO</span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-black text-white">Compra Confirmada com Sucesso!</h3>
                 <p className="text-xs text-neutral-300 mt-1">
-                  Seu pedido foi confirmado com sucesso. Seus arquivos já estão disponíveis para download vitalício!
+                  Seu pedido foi autenticado e validado diretamente no Mercado Pago. Seus arquivos estão liberados para download!
                 </p>
               </div>
+
+              {isVerifying && (
+                <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/30 text-xs text-blue-300 flex items-center justify-center gap-2">
+                  <RefreshCw className="w-4 h-4 animate-spin text-blue-400" />
+                  <span>Sincronizando confirmação oficial com o Mercado Pago...</span>
+                </div>
+              )}
 
               {/* Receipt Information Box */}
               <div className="bg-[#14161c] border border-white/[0.08] rounded-2xl p-4 sm:p-5 text-left text-xs space-y-2.5">
                 <div className="flex justify-between border-b border-white/[0.08] pb-2">
-                  <span className="text-neutral-400">Número do Pedido:</span>
+                  <span className="text-neutral-400">Identificação do Pedido:</span>
                   <span className="font-bold text-white font-mono">{completedOrder?.orderId || '#ORD-CONFIRMADO'}</span>
                 </div>
 
                 <div className="flex justify-between border-b border-white/[0.08] pb-2">
-                  <span className="text-neutral-400">Valor Pago:</span>
+                  <span className="text-neutral-400">Valor Total Pago:</span>
                   <span className="font-bold text-yellow-400 font-mono text-sm">{formatBRL(completedOrder?.total || totalAmount)}</span>
                 </div>
 
                 <div className="flex justify-between border-b border-white/[0.08] pb-2">
                   <span className="text-neutral-400">Forma de Pagamento:</span>
-                  <span className="font-bold text-white uppercase">{completedOrder?.paymentMethod || 'MERCADO PAGO'}</span>
+                  <span className="font-bold text-white uppercase">{completedOrder?.paymentMethod || 'MERCADO PAGO CHECKOUT PRO'}</span>
+                </div>
+
+                <div className="flex justify-between border-b border-white/[0.08] pb-2">
+                  <span className="text-neutral-400">Status no Sistema:</span>
+                  <span className="font-black text-emerald-400 uppercase">PAGO & LIBERADO</span>
                 </div>
 
                 <div className="flex justify-between">
@@ -1005,62 +900,83 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </div>
               </div>
 
-              {/* Direct Digital Product Access / Google Drive Links */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center justify-center gap-1.5">
-                  <Sparkles className="w-4 h-4" />
-                  <span>Acesso Imediato aos Produtos Adquiridos:</span>
-                </h4>
+              {/* Download Buttons for Purchased Items */}
+              {completedOrder?.items && completedOrder.items.length > 0 && (
+                <div className="space-y-2 text-left bg-black/40 p-4 rounded-2xl border border-emerald-500/30">
+                  <span className="text-xs font-black text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4" />
+                    <span>Seus Produtos Prontos para Download:</span>
+                  </span>
 
-                <div className="space-y-2.5">
-                  {(completedOrder?.items || items.map((i) => i.pack)).map((pack: PlaybackPack) => (
-                    <div
-                      key={pack.id}
-                      className="p-3.5 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-between gap-3 text-left"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-white truncate">{pack.title}</p>
-                        <p className="text-[10px] text-neutral-400 truncate">Multitrack + Stems em 320kbps</p>
-                      </div>
+                  <div className="space-y-2 pt-1">
+                    {completedOrder.items.map((it: any, idx: number) => {
+                      const itemTitle = it.title || it.pack?.title || 'Produto Adquirido';
+                      const postSale = it.postSaleUrl || it.pack?.postSaleUrl || completedOrder.postSaleUrls?.[idx] || completedOrder.postSaleUrls?.[0];
+                      return (
+                        <div key={idx} className="flex items-center justify-between p-2.5 rounded-xl bg-[#14161c] border border-white/5">
+                          <span className="text-xs font-bold text-white truncate max-w-[200px]">{itemTitle}</span>
+                          {postSale ? (
+                            <a
+                              href={postSale}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3.5 py-1.5 rounded-lg bg-[#00d06c] hover:bg-[#00b85f] text-black font-extrabold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span>BAIXAR PRODUTO</span>
+                            </a>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onClose();
+                                setIsCustomerAreaOpen(true);
+                              }}
+                              className="px-3.5 py-1.5 rounded-lg bg-[#00d06c] hover:bg-[#00b85f] text-black font-extrabold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span>BAIXAR PRODUTO</span>
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
-                      {pack.postSaleUrl ? (
-                        <a
-                          href={pack.postSaleUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs flex items-center gap-1.5 transition-all shadow-md shrink-0 cursor-pointer"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          <span>Baixar no Google Drive</span>
-                        </a>
-                      ) : (
-                        <span className="text-[11px] text-emerald-400 font-bold">Acesso Liberado</span>
-                      )}
-                    </div>
-                  ))}
+              {/* Direct Access Notification to Customer Area */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-[#14161c] border border-[#00d06c]/30 text-center space-y-3">
+                <div className="flex items-center justify-center gap-2 text-[#00d06c] font-bold text-xs uppercase tracking-wider">
+                  <Sparkles className="w-4 h-4 text-[#00d06c]" />
+                  <span>Área do Cliente Liberada Permanentemente</span>
+                </div>
+                <p className="text-xs text-neutral-300 max-w-md mx-auto leading-relaxed">
+                  Você também pode acessar e baixar todos os seus produtos a qualquer momento na sua <strong>Área do Cliente</strong> informando seu WhatsApp.
+                </p>
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      setIsCustomerAreaOpen(true);
+                    }}
+                    className="w-full py-4 rounded-2xl bg-[#00d06c] hover:bg-[#00b85f] text-black font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(0,208,108,0.4)] transition-all cursor-pointer active:scale-98"
+                  >
+                    <ShoppingBag className="w-5 h-5 text-black" />
+                    <span>ACESSAR MINHA ÁREA DO CLIENTE</span>
+                  </button>
                 </div>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    setIsCustomerAreaOpen(true);
-                  }}
-                  className="w-full py-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                >
-                  <ShoppingBag className="w-4 h-4 text-emerald-400" />
-                  <span>Ir para Minha Área do Cliente</span>
-                </button>
-
+              <div className="flex items-center justify-center pt-1">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="w-full py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs transition-colors cursor-pointer"
+                  className="text-xs text-neutral-400 hover:text-white transition-colors cursor-pointer"
                 >
-                  Continuar Navegando na Loja
+                  Continuar Navegando na Loja Virtual
                 </button>
               </div>
             </div>

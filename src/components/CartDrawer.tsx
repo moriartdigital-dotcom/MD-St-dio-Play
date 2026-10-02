@@ -3,6 +3,7 @@ import { CartItem, PlaybackPack } from '../types';
 import { PackThumbnail } from './PackThumbnail';
 import { useStore } from '../context/StoreContext';
 import { generatePixPayload, generatePixQrCodeDataUrl } from '../utils/pix';
+import { isValidCPF } from '../utils/cpfValidator';
 import {
   X,
   Trash2,
@@ -157,8 +158,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       return false;
     }
     const cpfDigits = customerCpf.replace(/\D/g, '');
-    if (cpfDigits.length !== 11) {
-      setFormError('O CPF deve conter exatamente 11 dígitos no formato 000.000.000-00.');
+    if (!cpfDigits || !isValidCPF(cpfDigits)) {
+      setFormError('Por favor, informe um CPF válido e existente.');
       return false;
     }
     setFormError(null);
@@ -250,91 +251,48 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     }
   };
 
-  // Process Real Mercado Pago Credit Card via /api/mercadopago/create-order
-  const handleProcessCreditCard = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Process Real Mercado Pago Credit Card via Official Checkout Pro
+  const handleProcessCreditCard = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!validateCustomerFields()) return;
-
-    const cleanCard = cardNumber.replace(/\D/g, '');
-    if (cleanCard.length < 13) {
-      setFormError('Informe um número de cartão de crédito válido.');
-      return;
-    }
-    if (!cardHolder.trim()) {
-      setFormError('Nome do titular impresso no cartão é obrigatório.');
-      return;
-    }
-    if (!cardExp.trim() || !cardExp.includes('/')) {
-      setFormError('Data de validade do cartão deve estar no formato MM/AA.');
-      return;
-    }
-    const cleanCvvNum = cardCvv.replace(/\D/g, '');
-    if (cleanCvvNum.length < 3) {
-      setFormError('Código de segurança (CVV) de 3 ou 4 dígitos é obrigatório.');
-      return;
-    }
 
     setCardLoading(true);
     setFormError(null);
 
-    const accessToken =
-      checkoutConfig.mercadoPagoAccessToken ||
-      checkoutConfig.creditCardSecretToken ||
-      '';
-
     try {
-      const response = await fetch('/api/mercadopago/create-order', {
+      const response = await fetch('/api/mercadopago/create-checkout-pro', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: total,
-          paymentMethodType: 'credit_card',
-          description: `MD Studio Play - ${items.map((i) => i.pack.title).join(', ')}`.slice(0, 100),
           payer: {
             name: customerName.trim(),
             email: customerEmail.trim(),
             phone: customerPhone,
             cpf: customerCpf.replace(/\D/g, ''),
           },
-          card: {
-            cardNumber: cleanCard,
-            cardHolder: cardHolder.trim(),
-            cardExp: cardExp.trim(),
-            cvv: cleanCvvNum,
-            installments,
-          },
-          config: {
-            mercadoPagoAccessToken: accessToken,
-          },
+          items: items.map((i) => ({
+            id: i.pack.id,
+            title: i.pack.title,
+            quantity: i.quantity,
+            unit_price: Number(i.pack.discountPrice ?? 57.99),
+            postSaleUrl: i.pack.postSaleUrl,
+            coverImage: i.pack.image,
+          })),
         }),
       });
 
       const data = await response.json();
 
-      if (data.success && (data.status === 'approved' || data.status === 'processed')) {
-        setMpPaymentId(data.paymentId || data.orderId);
-        await handleFinalizeOrderAndRedirect('card');
-        return;
-      } else if (data.success && (data.status === 'in_process' || data.status === 'action_required' || data.status === 'pending')) {
-        setMpPaymentId(data.paymentId || data.orderId);
-        await handleFinalizeOrderAndRedirect('card');
-        return;
-      } else if (!data.success && data.requiresToken) {
-        // Fallback demo approval only if no token is configured anywhere
-        await handleFinalizeOrderAndRedirect('card');
-        return;
+      if (data.success && data.checkout_url) {
+        // Redirect customer to official Mercado Pago Checkout Pro
+        window.location.href = data.checkout_url;
       } else {
-        setFormError(
-          data.error ||
-          data.mpDetails?.message ||
-          'Pagamento com cartão recusado pela operadora. Verifique os dados ou pague via PIX.'
-        );
-        return;
+        setFormError(data.error || 'Não foi possível iniciar o pagamento. Tente novamente.');
+        setCardLoading(false);
       }
     } catch (err: any) {
-      console.warn('Erro ao processar cartão Mercado Pago:', err);
-      setFormError('Erro ao comunicar com o Mercado Pago. Tente novamente ou use PIX.');
-    } finally {
+      console.warn('Erro ao processar Checkout Pro Mercado Pago:', err);
+      setFormError('Não foi possível iniciar o pagamento. Tente novamente.');
       setCardLoading(false);
     }
   };

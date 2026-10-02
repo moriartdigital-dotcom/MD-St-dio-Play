@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import crypto from 'crypto';
 import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from './src/firebase';
+import { isValidCPF } from './src/utils/cpfValidator';
 
 dotenv.config();
 
@@ -135,6 +136,56 @@ function detectCardBrand(num: string): string {
   return 'master';
 }
 
+// Helper: Translate Mercado Pago error codes & messages to user-friendly Portuguese
+function translateMercadoPagoError(mpData: any): string {
+  if (!mpData) return 'Falha na comunicação com o Mercado Pago.';
+
+  const causeCode = String(mpData.cause?.[0]?.code || '');
+  const causeDesc = String(mpData.cause?.[0]?.description || '');
+  const message = String(mpData.message || '');
+  const statusDetail = String(mpData.status_detail || '');
+  const combined = `${causeCode} ${causeDesc} ${message} ${statusDetail}`.toLowerCase();
+
+  if (combined.includes('3034') || combined.includes('card_number_validation')) {
+    return 'Número de cartão inválido ou não autorizado pela conta. Verifique os dados digitados ou utilize o PIX para aprovação imediata.';
+  }
+  if (combined.includes('2006') || combined.includes('card token not found') || combined.includes('invalid card_token_id') || combined.includes('3003')) {
+    return 'Não foi possível validar o token do cartão. Confira os números, validade e CVV ou escolha a opção PIX.';
+  }
+  if (combined.includes('2010') || combined.includes('security_code') || combined.includes('3000')) {
+    return 'Código de segurança (CVV) do cartão inválido.';
+  }
+  if (combined.includes('2007') || combined.includes('expiration_month') || combined.includes('expiration_year') || combined.includes('3001')) {
+    return 'Data de vencimento do cartão inválida ou expirada.';
+  }
+  if (combined.includes('2005') || combined.includes('installments')) {
+    return 'Número de parcelas selecionado inválido.';
+  }
+  if (combined.includes('4020') || combined.includes('notificaction_url')) {
+    return 'URL de notificação de pagamento inválida.';
+  }
+  if (combined.includes('cc_rejected_insufficient_amount')) {
+    return 'Saldo ou limite insuficiente no cartão informado.';
+  }
+  if (combined.includes('cc_rejected_bad_filled_security_code')) {
+    return 'Código de segurança (CVV) incorreto.';
+  }
+  if (combined.includes('cc_rejected_bad_filled_date')) {
+    return 'Data de validade do cartão incorreta.';
+  }
+  if (combined.includes('cc_rejected_bad_filled_other')) {
+    return 'Dados do cartão incorretos. Por favor, confira as informações.';
+  }
+  if (combined.includes('cc_rejected_call_for_authorize')) {
+    return 'Transação bloqueada pela operadora do cartão. Ligue para seu banco ou pague via PIX.';
+  }
+  if (combined.includes('cc_rejected_other_reason')) {
+    return 'Transação não autorizada pela operadora do cartão. Sugerimos pagar via PIX (aprovação em segundos).';
+  }
+
+  return causeDesc || message || 'Dados do pagamento não autorizados pelo banco ou operadora. Recomendamos pagar via PIX.';
+}
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // 1. API: Mercado Pago Configuration Status (Safe for Frontend)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -237,8 +288,8 @@ async function handleCreatePayment(req: Request, res: Response) {
     if (!email || !email.includes('@')) {
       return res.status(400).json({ success: false, error: 'E-mail válido é obrigatório.' });
     }
-    if (!cleanCpf || cleanCpf.length !== 11) {
-      return res.status(400).json({ success: false, error: 'CPF válido com 11 dígitos é obrigatório.' });
+    if (!cleanCpf || !isValidCPF(cleanCpf)) {
+      return res.status(400).json({ success: false, error: 'Por favor, informe um CPF válido e existente.' });
     }
 
     const nameParts = payerName.split(' ');
@@ -259,8 +310,22 @@ async function handleCreatePayment(req: Request, res: Response) {
     const idempotencyKey = crypto.randomUUID();
 
     const isCard = paymentMethodType === 'credit_card' || paymentMethodType === 'card';
-    const appUrl = (process.env.APP_URL || '').replace(/\/$/, '');
-    const notificationUrl = appUrl ? `${appUrl}/api/mercadopago/webhook` : undefined;
+
+    // Strict validation of notification_url to prevent Mercado Pago code 4020 bad_request error
+    let notificationUrl: string | undefined = undefined;
+    const rawAppUrl = (
+      process.env.APP_URL ||
+      process.env.VITE_APP_URL ||
+      ''
+    ).trim().replace(/\/$/, '');
+
+    if (
+      rawAppUrl.startsWith('https://') &&
+      !rawAppUrl.includes('localhost') &&
+      !rawAppUrl.includes('127.0.0.1')
+    ) {
+      notificationUrl = `${rawAppUrl}/api/mercadopago/webhook`;
+    }
 
     let paymentPayload: any;
 
@@ -268,7 +333,13 @@ async function handleCreatePayment(req: Request, res: Response) {
       // ━━━ CARTÃO DE CRÉDITO ━━━
       let cardTokenId = card?.token;
       let paymentMethodId = card?.payment_method_id || card?.brand;
-      const installments = Number(card?.installments) || 1;
+      const installments = Math.max(1, Math.min(12, Number(card?.installments) || 1));
+
+      // Sanitize issuer_id (must be a valid integer or omitted)
+      let safeIssuerId: string | undefined = undefined;
+      if (card?.issuer_id && /^\d+$/.test(String(card.issuer_id))) {
+        safeIssuerId = String(card.issuer_id);
+      }
 
       // If token not provided directly from frontend SDK, tokenize via MP Card Tokens API as fallback
       if (!cardTokenId && card?.cardNumber) {
@@ -310,12 +381,11 @@ async function handleCreatePayment(req: Request, res: Response) {
         if (tokenRes.ok && tokenData.id) {
           cardTokenId = tokenData.id;
         } else {
+          const friendlyCardError = translateMercadoPagoError(tokenData);
+          console.info(`[Mercado Pago Card Token Notice]: ${friendlyCardError}`);
           return res.status(400).json({
             success: false,
-            error:
-              tokenData.message ||
-              tokenData.cause?.[0]?.description ||
-              'Dados do cartão inválidos ou não autorizados.',
+            error: friendlyCardError,
             details: tokenData,
           });
         }
@@ -324,17 +394,20 @@ async function handleCreatePayment(req: Request, res: Response) {
       if (!cardTokenId) {
         return res.status(400).json({
           success: false,
-          error: 'Token do cartão de crédito não fornecido.',
+          error: 'Token do cartão não fornecido. Por favor, confira os dados do cartão ou realize o pagamento via PIX.',
         });
       }
+
+      paymentMethodId = paymentMethodId ? String(paymentMethodId).toLowerCase() : 'master';
+      if (paymentMethodId === 'mastercard') paymentMethodId = 'master';
 
       paymentPayload = {
         transaction_amount: calculatedTotal,
         token: cardTokenId,
         description: description.slice(0, 100),
         installments,
-        payment_method_id: paymentMethodId || 'master',
-        issuer_id: card?.issuer_id || undefined,
+        payment_method_id: paymentMethodId,
+        ...(safeIssuerId ? { issuer_id: safeIssuerId } : {}),
         external_reference: externalReference,
         payer: {
           email,
@@ -466,13 +539,11 @@ async function handleCreatePayment(req: Request, res: Response) {
         postSaleUrls,
       });
     } else {
-      console.warn('Mercado Pago /v1/payments error:', mpData);
+      const friendlyError = translateMercadoPagoError(mpData);
+      console.info(`[Mercado Pago /v1/payments Notice Status ${mpRes.status}]:`, friendlyError);
       return res.status(mpRes.status || 400).json({
         success: false,
-        error:
-          mpData.message ||
-          mpData.cause?.[0]?.description ||
-          'Falha ao processar pagamento com o Mercado Pago.',
+        error: friendlyError,
         details: mpData,
       });
     }
@@ -483,10 +554,413 @@ async function handleCreatePayment(req: Request, res: Response) {
 }
 
 app.post('/api/mercadopago/create-payment', handleCreatePayment);
-app.post('/api/mercadopago/create-order', handleCreatePayment);
 app.post('/api/mercadopago/create-pix', (req: Request, res: Response) => {
   req.body.paymentMethodType = 'pix';
   return handleCreatePayment(req, res);
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 3.1 API: Official Mercado Pago Checkout Pro (Orders & Preferences API)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+async function handleCreateCheckoutPro(req: Request, res: Response) {
+  try {
+    const { payer, items, config } = req.body;
+
+    const accessToken = getAccessToken(config);
+    if (!accessToken || accessToken.length < 10) {
+      return res.status(400).json({
+        success: false,
+        error: 'MERCADOPAGO_ACCESS_TOKEN não configurado no servidor.',
+      });
+    }
+
+    // 1. Validate customer / payer
+    const payerName = String(payer?.name || '').trim();
+    const cleanPhone = String(payer?.phone || '').replace(/\D/g, '');
+    const email = String(payer?.email || '').trim().toLowerCase();
+    const cleanCpf = String(payer?.cpf || '').replace(/\D/g, '');
+
+    if (!payerName || payerName.length < 3) {
+      return res.status(400).json({ success: false, error: 'Nome completo é obrigatório.' });
+    }
+    if (!cleanPhone || cleanPhone.length < 10) {
+      return res.status(400).json({ success: false, error: 'WhatsApp com DDD é obrigatório.' });
+    }
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ success: false, error: 'E-mail válido é obrigatório.' });
+    }
+    if (!cleanCpf || !isValidCPF(cleanCpf)) {
+      return res.status(400).json({ success: false, error: 'Por favor, informe um CPF válido e existente.' });
+    }
+
+    const nameParts = payerName.split(' ');
+    const firstName = nameParts[0] || 'Cliente';
+    const lastName = nameParts.slice(1).join(' ') || 'VIP';
+    const areaCode = cleanPhone.length >= 10 ? cleanPhone.substring(0, 2) : '11';
+    const phoneNumber = cleanPhone.length >= 10 ? cleanPhone.substring(2) : cleanPhone;
+
+    // 2. Recalculate real purchase total on backend (anti-tampering)
+    const { total: calculatedTotal, postSaleUrls, validatedItems } = calculateRealOrderTotal(items);
+    if (!calculatedTotal || calculatedTotal <= 0) {
+      return res.status(400).json({ success: false, error: 'Valor da compra inválido.' });
+    }
+
+    // 3. Generate unique order references
+    const orderId = `PEDIDO-2026-${Date.now().toString().slice(-6)}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+    const externalReference = orderId;
+    const idempotencyKey = crypto.randomUUID();
+
+    // 4. Base return URLs
+    const rawAppUrl = (
+      req.headers.origin ||
+      (req.headers.host ? `https://${req.headers.host}` : '') ||
+      process.env.APP_URL ||
+      process.env.VITE_APP_URL ||
+      ''
+    ).trim().replace(/\/$/, '');
+
+    const appUrl = rawAppUrl.startsWith('http') ? rawAppUrl : 'https://ais-dev-xwg7la6zry2t4nlh34hemd-154142596752.us-east1.run.app';
+
+    const backUrls = {
+      success: `${appUrl}/pagamento/sucesso`,
+      pending: `${appUrl}/pagamento/pendente`,
+      failure: `${appUrl}/pagamento/erro`,
+    };
+
+    // Strict validation of notification_url
+    let notificationUrl: string | undefined = undefined;
+    if (appUrl.startsWith('https://') && !appUrl.includes('localhost') && !appUrl.includes('127.0.0.1')) {
+      notificationUrl = `${appUrl}/api/mercadopago/webhook`;
+    }
+
+    // 5. Construct Checkout Pro Preference Payload
+    const preferencePayload = {
+      items: validatedItems.map((it) => ({
+        id: String(it.id).slice(0, 60),
+        title: String(it.title).slice(0, 200),
+        description: `MD Stúdio Play - ${String(it.title).slice(0, 100)}`,
+        quantity: Math.max(1, Number(it.quantity) || 1),
+        currency_id: 'BRL',
+        unit_price: Number(it.unit_price),
+        ...(it.coverImage && it.coverImage.startsWith('https://') ? { picture_url: it.coverImage } : {}),
+      })),
+      payer: {
+        name: firstName,
+        surname: lastName,
+        email: email,
+        phone: {
+          area_code: areaCode,
+          number: phoneNumber,
+        },
+        identification: {
+          type: 'CPF',
+          number: cleanCpf,
+        },
+      },
+      back_urls: backUrls,
+      auto_return: 'approved',
+      external_reference: externalReference,
+      ...(notificationUrl ? { notification_url: notificationUrl } : {}),
+      payment_methods: {
+        excluded_payment_types: [
+          { id: 'ticket' }, // Exclude boleto to focus on credit card / card payments
+        ],
+        installments: 12,
+      },
+      statement_descriptor: 'MD STUDIO',
+      metadata: {
+        order_id: orderId,
+        customer_phone: cleanPhone,
+        customer_email: email,
+      },
+    };
+
+    // 6. Call official Mercado Pago /checkout/preferences
+    const mpRes = await fetch('https://api.mercadopago.com/checkout/preferences', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+        'X-Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify(preferencePayload),
+    });
+
+    const mpData: any = await mpRes.json();
+
+    if (mpRes.ok && (mpData.init_point || mpData.sandbox_init_point)) {
+      const isSandbox = accessToken.startsWith('TEST-');
+      const checkoutUrl = isSandbox && mpData.sandbox_init_point ? mpData.sandbox_init_point : mpData.init_point;
+      const preferenceId = String(mpData.id || '');
+
+      // Persist order in Firestore
+      const orderDocData = {
+        id: orderId,
+        orderNumber: orderId,
+        customer_id: cleanPhone,
+        customerName: payerName,
+        customerEmail: email,
+        customerPhone: cleanPhone,
+        customerCpf: cleanCpf,
+        external_reference: externalReference,
+        items: validatedItems,
+        total: calculatedTotal,
+        subtotal: calculatedTotal,
+        discount: 0,
+        paymentMethod: 'card',
+        payment_method: 'credit_card',
+        payment_gateway: 'mercadopago_checkout_pro',
+        preference_id: preferenceId,
+        checkout_url: checkoutUrl,
+        status: 'pending',
+        order_status: 'AGUARDANDO PAGAMENTO',
+        payment_status: 'pending',
+        post_sale_urls: postSaleUrls,
+        date: new Date().toLocaleDateString('pt-BR'),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      try {
+        await setDoc(doc(db, 'orders', orderId), orderDocData, { merge: true });
+      } catch (dbErr) {
+        console.warn('Notice: Firestore save in backend Checkout Pro:', dbErr);
+      }
+
+      console.info(`[Checkout Pro Created]: Order ${orderId}, Preference ${preferenceId}, URL: ${checkoutUrl}`);
+
+      return res.json({
+        success: true,
+        orderId,
+        externalReference,
+        checkout_url: checkoutUrl,
+        initPoint: checkoutUrl,
+        preferenceId,
+        totalAmount: calculatedTotal,
+      });
+    } else {
+      const friendlyError = translateMercadoPagoError(mpData);
+      console.info(`[Checkout Pro Error Status ${mpRes.status}]:`, friendlyError);
+      return res.status(mpRes.status || 400).json({
+        success: false,
+        error: friendlyError,
+        details: mpData,
+      });
+    }
+  } catch (err: any) {
+    console.error('Unexpected error creating Mercado Pago Checkout Pro:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Erro interno no servidor' });
+  }
+}
+
+app.post('/api/mercadopago/create-checkout-pro', handleCreateCheckoutPro);
+app.post('/api/mercadopago/create-order', handleCreateCheckoutPro);
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 3.2 API: Verify Order Payment (Consults Mercado Pago directly)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+app.post('/api/mercadopago/verify-order', async (req: Request, res: Response) => {
+  try {
+    const { paymentId, externalReference } = req.body;
+    const accessToken = getAccessToken();
+
+    if (!paymentId && !externalReference) {
+      return res.status(400).json({
+        success: false,
+        error: 'Identificador do pagamento ou referência do pedido não fornecido.',
+      });
+    }
+
+    let realPayment: any = null;
+
+    // 1. Direct consultation by payment ID if available
+    if (paymentId && /^\d+$/.test(String(paymentId))) {
+      const pRes = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (pRes.ok) {
+        realPayment = await pRes.json();
+      }
+    }
+
+    // 2. Search by external_reference if not found by ID
+    if (!realPayment && externalReference) {
+      const sRes = await fetch(
+        `https://api.mercadopago.com/v1/payments/search?external_reference=${encodeURIComponent(
+          externalReference
+        )}&sort=date_created&criteria=desc&limit=1`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (sRes.ok) {
+        const sData = await sRes.json();
+        if (sData.results && sData.results.length > 0) {
+          realPayment = sData.results[0];
+        }
+      }
+    }
+
+    // 3. Search orders collection in Firestore
+    let orderDocRef: any = null;
+    let orderData: any = null;
+
+    if (externalReference) {
+      const q = query(collection(db, 'orders'), where('external_reference', '==', externalReference));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        orderDocRef = snap.docs[0].ref;
+        orderData = snap.docs[0].data();
+      }
+    }
+
+    if (!orderDocRef && paymentId) {
+      const q = query(collection(db, 'orders'), where('payment_id', '==', String(paymentId)));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        orderDocRef = snap.docs[0].ref;
+        orderData = snap.docs[0].data();
+      }
+    }
+
+    if (realPayment) {
+      const mpStatus = String(realPayment.status || '');
+      const isApproved = mpStatus === 'approved';
+      const { orderStatus, simpleStatus } = mapOrderStatus(mpStatus);
+
+      if (orderDocRef) {
+        await updateDoc(orderDocRef, {
+          payment_id: String(realPayment.id),
+          mercadoPagoPaymentId: String(realPayment.id),
+          payment_status: mpStatus,
+          order_status: orderStatus,
+          status: simpleStatus,
+          updated_at: new Date().toISOString(),
+          ...(isApproved ? { released_at: new Date().toISOString() } : {}),
+        });
+
+        orderData = {
+          ...orderData,
+          payment_id: String(realPayment.id),
+          mercadoPagoPaymentId: String(realPayment.id),
+          payment_status: mpStatus,
+          order_status: orderStatus,
+          status: simpleStatus,
+          released_at: isApproved ? new Date().toISOString() : orderData.released_at,
+        };
+      }
+
+      console.info(`[Order Verified]: Ref ${externalReference || paymentId} -> Status: ${mpStatus} (Approved: ${isApproved})`);
+
+      return res.json({
+        success: true,
+        verified: isApproved,
+        status: mpStatus,
+        orderStatus,
+        paymentId: realPayment.id,
+        externalReference: realPayment.external_reference || externalReference,
+        amount: realPayment.transaction_amount,
+        order: orderData,
+      });
+    }
+
+    // If order was already confirmed previously in Firestore
+    if (orderData && (orderData.status === 'completed' || orderData.payment_status === 'approved')) {
+      return res.json({
+        success: true,
+        verified: true,
+        status: 'approved',
+        orderStatus: 'PAGAMENTO APROVADO',
+        order: orderData,
+      });
+    }
+
+    return res.json({
+      success: true,
+      verified: false,
+      status: orderData?.payment_status || 'pending',
+      orderStatus: orderData?.order_status || 'AGUARDANDO PAGAMENTO',
+      order: orderData,
+      message: 'Aguardando confirmação do Mercado Pago.',
+    });
+  } catch (err: any) {
+    console.error('Error verifying order:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Erro ao verificar pedido' });
+  }
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 3.3 API: Protected Download Access (Only for Approved Orders)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+app.get('/api/downloads/:orderId/:packId', async (req: Request, res: Response) => {
+  try {
+    const { orderId, packId } = req.params;
+    const customerPhone = String(req.query.phone || req.headers['x-customer-phone'] || '').replace(/\D/g, '');
+
+    // 1. Fetch Order from Firestore
+    let orderData: any = null;
+    const orderDoc = await getDoc(doc(db, 'orders', orderId));
+
+    if (orderDoc.exists()) {
+      orderData = orderDoc.data();
+    } else {
+      // Try search by external_reference
+      const q = query(collection(db, 'orders'), where('external_reference', '==', orderId));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        orderData = snap.docs[0].data();
+      }
+    }
+
+    if (!orderData) {
+      return res.status(404).json({ success: false, error: 'Pedido não encontrado.' });
+    }
+
+    const isApproved =
+      orderData.status === 'completed' ||
+      orderData.payment_status === 'approved' ||
+      orderData.order_status === 'PAGAMENTO APROVADO';
+
+    if (!isApproved) {
+      return res.status(403).json({
+        success: false,
+        error: 'Este produto ainda não está disponível para download. O pagamento precisa ser confirmado.',
+        paymentStatus: orderData.payment_status || 'pending',
+      });
+    }
+
+    // 2. Validate customer phone if provided
+    if (customerPhone && orderData.customerPhone) {
+      const orderPhoneClean = String(orderData.customerPhone).replace(/\D/g, '');
+      if (orderPhoneClean && !orderPhoneClean.includes(customerPhone) && !customerPhone.includes(orderPhoneClean)) {
+        return res.status(403).json({
+          success: false,
+          error: 'Acesso não autorizado para este número de WhatsApp.',
+        });
+      }
+    }
+
+    // 3. Locate item
+    const items = orderData.items || [];
+    const item = items.find((i: any) => (i.pack?.id || i.id) === packId) || items[0];
+    const downloadUrl = item?.postSaleUrl || item?.pack?.postSaleUrl || orderData.post_sale_urls?.[0];
+
+    if (!downloadUrl) {
+      return res.status(404).json({ success: false, error: 'Link de download do produto não configurado.' });
+    }
+
+    if (req.query.redirect === 'true') {
+      return res.redirect(downloadUrl);
+    }
+
+    return res.json({
+      success: true,
+      orderId,
+      packId,
+      title: item?.title || item?.pack?.title || 'Produto MD Studio',
+      downloadUrl,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Erro ao processar download' });
+  }
 });
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

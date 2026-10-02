@@ -32,6 +32,7 @@ export default function App() {
     isAdminMode,
     setIsAdminMode,
     themeConfig,
+    setIsCustomerAreaOpen,
   } = useStore();
 
   // Public Storefront State
@@ -58,11 +59,13 @@ export default function App() {
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [checkoutInitialView, setCheckoutInitialView] = useState<'checkout' | 'success' | 'pending' | 'error'>('checkout');
 
-  // Handle direct payment routes (/pagamento/sucesso, /pagamento/pendente, /pagamento/erro, /checkout)
+  // Handle direct payment routes (/pagamento/sucesso, /pagamento/pendente, /pagamento/erro, /checkout, /area-do-cliente)
   useEffect(() => {
     const path = window.location.pathname.toLowerCase();
     const hash = window.location.hash.toLowerCase();
-    if (path.includes('/pagamento/sucesso') || hash.includes('sucesso')) {
+    if (path.includes('/area-do-cliente') || hash.includes('area-do-cliente')) {
+      setIsCustomerAreaOpen(true);
+    } else if (path.includes('/pagamento/sucesso') || hash.includes('sucesso')) {
       setCheckoutInitialView('success');
       setIsCheckoutModalOpen(true);
     } else if (path.includes('/pagamento/pendente') || hash.includes('pendente')) {
@@ -75,7 +78,7 @@ export default function App() {
       setCheckoutInitialView('checkout');
       setIsCheckoutModalOpen(true);
     }
-  }, []);
+  }, [setIsCustomerAreaOpen]);
 
   // Toast feedback state
   const [toastMessage, setToastMessage] = useState<string | null>(null);

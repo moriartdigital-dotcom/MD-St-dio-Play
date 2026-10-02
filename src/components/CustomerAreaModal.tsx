@@ -194,12 +194,54 @@ export const CustomerAreaModal: React.FC = () => {
   const seenPackIds = new Set<string>();
 
   completedOrders.forEach((order) => {
-    order.items.forEach((item) => {
-      if (!seenPackIds.has(item.pack.id)) {
-        seenPackIds.add(item.pack.id);
-        authorizedPacks.push({ pack: item.pack, order });
-      }
-    });
+    if (Array.isArray(order.items)) {
+      order.items.forEach((item: any) => {
+        const pack = item.pack || item;
+        const packId = pack.id || `pack_${Math.random()}`;
+        if (!seenPackIds.has(packId)) {
+          seenPackIds.add(packId);
+          authorizedPacks.push({
+            pack: {
+              id: packId,
+              title: pack.title || 'Produto Adquirido',
+              artist: pack.artist || '',
+              genre: pack.genre || 'Playback',
+              originalPrice: pack.originalPrice || 57.99,
+              discountPrice: pack.discountPrice || 57.99,
+              image: pack.image || pack.coverImage || '/md_studio_logo.jpg',
+              releaseYear: pack.releaseYear || 2026,
+              tracks: Array.isArray(pack.tracks) ? pack.tracks : [],
+              postSaleUrl: pack.postSaleUrl || (order.post_sale_urls && order.post_sale_urls[0]),
+            },
+            order,
+          });
+        }
+      });
+    }
+
+    if (authorizedPacks.length === 0 && Array.isArray(order.post_sale_urls) && order.post_sale_urls.length > 0) {
+      order.post_sale_urls.forEach((url, idx) => {
+        const pseudoId = `postsale_${order.id}_${idx}`;
+        if (!seenPackIds.has(pseudoId)) {
+          seenPackIds.add(pseudoId);
+          authorizedPacks.push({
+            pack: {
+              id: pseudoId,
+              title: (order.items?.[idx] as any)?.pack?.title || (order.items?.[idx] as any)?.title || 'Coletânea Completa',
+              artist: '',
+              genre: 'Playbacks & Multitracks',
+              originalPrice: order.total || 57.99,
+              discountPrice: order.total || 57.99,
+              image: '/md_studio_logo.jpg',
+              releaseYear: 2026,
+              tracks: [],
+              postSaleUrl: url,
+            },
+            order,
+          });
+        }
+      });
+    }
   });
 
   const handleSimulatePaymentApproval = (orderId: string) => {
@@ -515,7 +557,7 @@ Acesso permanente aos arquivos multitrack na nuvem autorizado.`;
                     <CheckCircle2 className="w-5 h-5 text-[#55c21b] shrink-0" />
                     <div>
                       <p className="text-xs font-bold text-white">
-                        Pagamento Confirmado · Acesso Vitalício Liberado!
+                        Pagamento Aprovado · Acesso Vitalício Liberado!
                       </p>
                       <p className="text-[11px] text-neutral-400">
                         Faça o download de todos os seus playbacks masterizados em 320kbps e multitracks com stems individuais.
@@ -526,21 +568,17 @@ Acesso permanente aos arquivos multitrack na nuvem autorizado.`;
                   <div className="mb-5 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-3">
                     <div className="flex items-center gap-2.5 text-amber-400">
                       <Clock className="w-5 h-5 shrink-0" />
-                      <span className="text-xs font-bold">
-                        Pagamento em Análise · Aguardando Compensação
+                      <span className="text-xs font-bold uppercase tracking-wider">
+                        Pagamento Pendente · Aguardando Confirmação do Mercado Pago
                       </span>
                     </div>
                     <p className="text-xs text-neutral-300">
-                      Seu pedido foi registrado! Assim que o pagamento via PIX ou Cartão for confirmado, seus downloads serão liberados instantaneamente nesta tela.
+                      Seu pedido foi registrado! Assim que o pagamento via PIX ou Cartão for confirmado pelo Mercado Pago, seus downloads serão liberados instantaneamente nesta tela.
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => handleSimulatePaymentApproval(pendingOrders[0].id)}
-                      className="px-3.5 py-1.5 rounded-xl bg-[#55c21b] hover:bg-[#48a816] text-black font-extrabold text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>Confirmar Pagamento Imediatamente (Simular)</span>
-                    </button>
+                    <div className="p-3 bg-black/40 rounded-xl border border-amber-500/20 text-xs text-amber-300 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
+                      <span>Este produto ainda não está disponível para download.</span>
+                    </div>
                   </div>
                 ) : (
                   <div className="text-center py-10 px-4 bg-white/[0.02] border border-white/5 rounded-2xl">
@@ -561,60 +599,84 @@ Acesso permanente aos arquivos multitrack na nuvem autorizado.`;
                   </div>
                 )}
 
-                {/* List of Products / Packs with Instant Downloads */}
-                <div className="space-y-4">
-                  {authorizedPacks.map(({ pack, order }) => (
-                    <div
-                      key={pack.id}
-                      className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-white/20 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
-                    >
-                      <div className="flex items-center gap-3.5 min-w-0">
-                        <img
-                          src={pack.image}
-                          alt={pack.title}
-                          className="w-16 h-16 rounded-xl object-cover border border-white/10 shrink-0"
-                        />
+                {/* List of Products / Packs with Instant Downloads (Exact match to uploaded design) */}
+                <div className="space-y-3 pt-1">
+                  <div className="text-xs sm:text-sm font-black text-[#00d06c] uppercase tracking-wider flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-[#00d06c]" />
+                      <span>MEUS PRODUTOS</span>
+                    </div>
+                    {authorizedPacks.length > 0 && (
+                      <span className="text-[10px] font-bold text-neutral-400">
+                        {authorizedPacks.length} {authorizedPacks.length === 1 ? 'PRODUTO LIBERADO' : 'PRODUTOS LIBERADOS'}
+                      </span>
+                    )}
+                  </div>
+
+                  {pendingOrders.length > 0 && authorizedPacks.length === 0 && (
+                    <div className="space-y-2">
+                      {pendingOrders.map((ord) => (
+                        <div key={ord.id} className="p-4 rounded-2xl bg-[#0e1014] border border-amber-500/20 text-left space-y-1">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="font-mono text-neutral-400">{ord.orderNumber}</span>
+                            <span className="text-[10px] font-bold text-amber-400 uppercase">AGUARDANDO PAGAMENTO</span>
+                          </div>
+                          <p className="text-xs text-neutral-400 italic">Este produto ainda não está disponível para download.</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="space-y-3">
+                    {authorizedPacks.map(({ pack, order }) => (
+                      <div
+                        key={pack.id}
+                        className="p-4 sm:p-5 rounded-2xl bg-[#0e1014] border border-white/10 hover:border-emerald-500/30 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-left shadow-xl"
+                      >
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#55c21b]/20 text-[#55c21b] border border-[#55c21b]/30">
-                              Pago & Liberado
+                          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-black uppercase tracking-wider">
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>✓ PAGAMENTO APROVADO</span>
                             </span>
-                            <span className="text-[10px] text-neutral-500 font-mono">
-                              {order.orderNumber}
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-wider">
+                              <span>✓ PRODUTO LIBERADO</span>
                             </span>
                           </div>
-                          <h4 className="text-sm font-bold text-white truncate">{pack.title}</h4>
-                          <p className="text-xs text-neutral-400">
-                            {pack.artist || 'Vários'} · {pack.tracks.length} faixas · Multitrack + Stems
+
+                          <h4 className="text-sm sm:text-base font-bold text-white truncate">
+                            {pack.title}
+                          </h4>
+                          <p className="text-xs text-neutral-400 mt-1">
+                            {pack.artist ? `${pack.artist} · ` : ''}Multitrack + Stems em 320kbps (Acesso Vitalício)
                           </p>
                         </div>
-                      </div>
 
-                      {/* Download Buttons */}
-                      <div className="flex flex-wrap items-center gap-2 shrink-0">
-                        {pack.postSaleUrl ? (
-                          <a
-                            href={pack.postSaleUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                            <span>Abrir na Nuvem (Drive/Mega)</span>
-                          </a>
-                        ) : null}
-
-                        <button
-                          type="button"
-                          onClick={() => handleDownloadFile(pack)}
-                          className="px-4 py-2 rounded-xl bg-[#55c21b] hover:bg-[#48a816] text-black font-extrabold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-[#55c21b]/20 cursor-pointer active:scale-95"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          <span>Baixar ZIP (Master 320kbps)</span>
-                        </button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {pack.postSaleUrl ? (
+                            <a
+                              href={pack.postSaleUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-5 py-2.5 rounded-2xl bg-[#00d06c] hover:bg-[#00b85f] text-black font-black text-xs sm:text-sm flex items-center gap-2 transition-all shadow-md active:scale-95 cursor-pointer shrink-0"
+                            >
+                              <Download className="w-4 h-4 text-black" />
+                              <span>BAIXAR PRODUTO</span>
+                            </a>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadFile(pack)}
+                              className="px-5 py-2.5 rounded-2xl bg-[#00d06c] hover:bg-[#00b85f] text-black font-black text-xs sm:text-sm flex items-center gap-2 transition-all shadow-md active:scale-95 cursor-pointer shrink-0"
+                            >
+                              <Download className="w-4 h-4 text-black" />
+                              <span>BAIXAR PRODUTO</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </div>
             ) : (
