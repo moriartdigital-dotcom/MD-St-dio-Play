@@ -113,7 +113,14 @@ function calculateRealOrderTotal(items: any[]): { total: number; postSaleUrls: s
     const itemTotal = Number((unitPrice * qty).toFixed(2));
     total += itemTotal;
 
-    const postSale = pack.postSaleUrl || item.postSaleUrl;
+    let postSale = pack.postSaleUrl || item.postSaleUrl;
+    if (!postSale) {
+      if (packId === 'pack_midi_variados_vip_2026') {
+        postSale = 'https://drive.google.com/drive/folders/1ns6pguW_lxaQdqrn7RdIBwBWVr36VJkm?usp=drive_link';
+      } else if (packId === 'pack_midi_gospel_vip_2026') {
+        postSale = 'https://drive.google.com/drive/folders/1J6vQUbziL7PvtWhc1iZCcht2fIRRwtYd?usp=drive_link';
+      }
+    }
     if (postSale && !postSaleUrls.includes(postSale)) {
       postSaleUrls.push(postSale);
     }
@@ -966,7 +973,15 @@ app.get('/api/downloads/:orderId/:packId', async (req: Request, res: Response) =
     // 3. Locate item
     const items = orderData.items || [];
     const item = items.find((i: any) => (i.pack?.id || i.id) === packId) || items[0];
-    const downloadUrl = item?.postSaleUrl || item?.pack?.postSaleUrl || orderData.post_sale_urls?.[0];
+    let downloadUrl = item?.postSaleUrl || item?.pack?.postSaleUrl || orderData.post_sale_urls?.[0];
+
+    if (!downloadUrl) {
+      if (packId === 'pack_midi_variados_vip_2026') {
+        downloadUrl = 'https://drive.google.com/drive/folders/1ns6pguW_lxaQdqrn7RdIBwBWVr36VJkm?usp=drive_link';
+      } else if (packId === 'pack_midi_gospel_vip_2026') {
+        downloadUrl = 'https://drive.google.com/drive/folders/1J6vQUbziL7PvtWhc1iZCcht2fIRRwtYd?usp=drive_link';
+      }
+    }
 
     if (!downloadUrl) {
       return res.status(404).json({ success: false, error: 'Link de download do produto não configurado.' });

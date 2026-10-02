@@ -347,11 +347,11 @@ export const DEFAULT_MIDI_GOSPEL: MidiPageConfig = {
   audioPreviewTitle: 'DEMONSTRAÇÃO DE ÁUDIO — MIDI GOSPEL',
   audioPreviewSubtitle: 'Clique para ouvir uma amostra dos louvores e adoração',
   audioPreviewUrl:
-    'https://moriartdigital.com.br/mdstudio/wa_files/(x)cam.%20amarelo%20dodge%20rom%20s.%20disfarcado.mp3',
+    'https://moriartdigital.com.br/mdstudio/wa_files/eu%20navegarei%20demo%20midi.mp3',
   postSaleUrl:
-    'https://drive.google.com/drive/folders/1ns6pguW_lxaQdqrn7RdIBwBWVr36VJkm?usp=drive_link',
+    'https://drive.google.com/drive/folders/1J6vQUbziL7PvtWhc1iZCcht2fIRRwtYd?usp=drive_link',
   tracklistUrl:
-    'https://moriartdigital.com.br/mdstudio/wa_files/midis%20para%20apresentacao.docx',
+    'https://moriartdigital.com.br/mdstudio/wa_files/midi%20gospel%20apresentacao_(1).docx',
   tracklistButtonText: 'VER LISTA COMPLETA DAS MÚSICAS',
   highlights: [
     'Repertório completo de Adoração, Celebração e Harpa Cristã',
@@ -656,17 +656,26 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   });
 
   const [midiVariadosConfig, setMidiVariadosConfig] = useState<MidiPageConfig>(() => {
-    const saved = localStorage.getItem('jsp_midi_variados_v2') || localStorage.getItem('jsp_midi_variados');
+    const saved = localStorage.getItem('jsp_midi_variados_v3') || localStorage.getItem('jsp_midi_variados_v2') || localStorage.getItem('jsp_midi_variados');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.price === 149.9 || !parsed.tracklistUrl) {
+        if (
+          parsed.price === 149.9 ||
+          !parsed.tracklistUrl ||
+          parsed.postSaleUrl?.includes('mega-pack') ||
+          parsed.audioPreviewUrl?.includes('freesound')
+        ) {
           return DEFAULT_MIDI_VARIADOS;
         }
         return {
           ...DEFAULT_MIDI_VARIADOS,
           ...parsed,
+          price: 57.99,
           circleImage: parsed.circleImage || DEFAULT_MIDI_VARIADOS.circleImage,
+          tracklistUrl: DEFAULT_MIDI_VARIADOS.tracklistUrl,
+          audioPreviewUrl: DEFAULT_MIDI_VARIADOS.audioPreviewUrl,
+          postSaleUrl: DEFAULT_MIDI_VARIADOS.postSaleUrl,
         };
       } catch {
         return DEFAULT_MIDI_VARIADOS;
@@ -677,24 +686,31 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const [midiGospelConfig, setMidiGospelConfig] = useState<MidiPageConfig>(() => {
     const saved =
+      localStorage.getItem('jsp_midi_gospel_v6') ||
       localStorage.getItem('jsp_midi_gospel_v5') ||
-      localStorage.getItem('jsp_midi_gospel') ||
-      localStorage.getItem('jsp_midi_gospel_v4');
+      localStorage.getItem('jsp_midi_gospel');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // If legacy stale state from earlier sessions (149.9 or local image), discard and use DEFAULT_MIDI_GOSPEL
         if (
           parsed.price === 149.9 ||
           parsed.circleImage === '/midi_gospel_art.jpg' ||
-          !parsed.circleImage?.startsWith('http')
+          !parsed.circleImage?.startsWith('http') ||
+          parsed.audioPreviewUrl?.includes('(x)cam.') ||
+          parsed.audioPreviewUrl?.includes('freesound') ||
+          parsed.postSaleUrl?.includes('mega-pack') ||
+          parsed.postSaleUrl?.includes('1ns6pguW')
         ) {
           return DEFAULT_MIDI_GOSPEL;
         }
         return {
           ...DEFAULT_MIDI_GOSPEL,
           ...parsed,
-          circleImage: parsed.circleImage || DEFAULT_MIDI_GOSPEL.circleImage,
+          price: 57.99,
+          circleImage: DEFAULT_MIDI_GOSPEL.circleImage,
+          tracklistUrl: DEFAULT_MIDI_GOSPEL.tracklistUrl,
+          audioPreviewUrl: DEFAULT_MIDI_GOSPEL.audioPreviewUrl,
+          postSaleUrl: DEFAULT_MIDI_GOSPEL.postSaleUrl,
         };
       } catch {
         return DEFAULT_MIDI_GOSPEL;
@@ -847,14 +863,31 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               setFlyerShowConfig(config as FlyerShowConfig);
               localStorage.setItem('jsp_flyer_show', JSON.stringify(config));
             } else if (id === 'midi_variados' && config.title) {
-              setMidiVariadosConfig(config as MidiPageConfig);
-              localStorage.setItem('jsp_midi_variados', JSON.stringify(config));
-              localStorage.setItem('jsp_midi_variados_v2', JSON.stringify(config));
+              const merged = {
+                ...DEFAULT_MIDI_VARIADOS,
+                ...config,
+                price: 57.99,
+                circleImage: config.circleImage || DEFAULT_MIDI_VARIADOS.circleImage,
+                tracklistUrl: config.tracklistUrl || DEFAULT_MIDI_VARIADOS.tracklistUrl,
+                audioPreviewUrl: config.audioPreviewUrl || DEFAULT_MIDI_VARIADOS.audioPreviewUrl,
+                postSaleUrl: config.postSaleUrl || DEFAULT_MIDI_VARIADOS.postSaleUrl,
+              };
+              setMidiVariadosConfig(merged as MidiPageConfig);
+              localStorage.setItem('jsp_midi_variados', JSON.stringify(merged));
+              localStorage.setItem('jsp_midi_variados_v3', JSON.stringify(merged));
             } else if (id === 'midi_gospel' && config.title) {
-              setMidiGospelConfig(config as MidiPageConfig);
-              localStorage.setItem('jsp_midi_gospel', JSON.stringify(config));
-              localStorage.setItem('jsp_midi_gospel_v4', JSON.stringify(config));
-              localStorage.setItem('jsp_midi_gospel_v5', JSON.stringify(config));
+              const merged = {
+                ...DEFAULT_MIDI_GOSPEL,
+                ...config,
+                price: 57.99,
+                circleImage: config.circleImage || DEFAULT_MIDI_GOSPEL.circleImage,
+                tracklistUrl: config.tracklistUrl || DEFAULT_MIDI_GOSPEL.tracklistUrl,
+                audioPreviewUrl: config.audioPreviewUrl || DEFAULT_MIDI_GOSPEL.audioPreviewUrl,
+                postSaleUrl: config.postSaleUrl || DEFAULT_MIDI_GOSPEL.postSaleUrl,
+              };
+              setMidiGospelConfig(merged as MidiPageConfig);
+              localStorage.setItem('jsp_midi_gospel', JSON.stringify(merged));
+              localStorage.setItem('jsp_midi_gospel_v6', JSON.stringify(merged));
             }
           });
         }
