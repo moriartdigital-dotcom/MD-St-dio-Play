@@ -74,8 +74,18 @@ function mapOrderStatus(mpStatus: string): {
 
 // Helper: Recalculate and validate total purchase value on backend (Anti-Tampering)
 function calculateRealOrderTotal(items: any[]): { total: number; postSaleUrls: string[]; validatedItems: any[] } {
+  const fallbackItem = {
+    id: 'pack_flyer_150_mega',
+    title: 'Produto MD Stúdio Play',
+    quantity: 1,
+    unit_price: 57.99,
+    total: 57.99,
+    postSaleUrl: null,
+    coverImage: null,
+  };
+
   if (!Array.isArray(items) || items.length === 0) {
-    return { total: 57.99, postSaleUrls: [], validatedItems: [] };
+    return { total: 57.99, postSaleUrls: [], validatedItems: [fallbackItem] };
   }
 
   let total = 0;
@@ -83,9 +93,10 @@ function calculateRealOrderTotal(items: any[]): { total: number; postSaleUrls: s
   const validatedItems: any[] = [];
 
   for (const item of items) {
+    if (!item) continue;
     const qty = Math.max(1, Number(item.quantity) || 1);
     const pack = item.pack || item;
-    const packId = String(pack.id || item.id || '');
+    const packId = String(pack.id || item.id || 'pack_flyer_150_mega');
     let unitPrice = Number(pack.discountPrice ?? item.unit_price ?? item.price ?? 0);
 
     // Baseline catalog checks for special collection products
@@ -116,6 +127,11 @@ function calculateRealOrderTotal(items: any[]): { total: number; postSaleUrls: s
       postSaleUrl: postSale || null,
       coverImage: pack.image || pack.coverImage || null,
     });
+  }
+
+  if (validatedItems.length === 0) {
+    validatedItems.push(fallbackItem);
+    total = 57.99;
   }
 
   return {
@@ -610,16 +626,25 @@ async function handleCreateCheckoutPro(req: Request, res: Response) {
     const externalReference = orderId;
     const idempotencyKey = crypto.randomUUID();
 
-    // 4. Base return URLs
-    const rawAppUrl = (
-      req.headers.origin ||
-      (req.headers.host ? `https://${req.headers.host}` : '') ||
-      process.env.APP_URL ||
-      process.env.VITE_APP_URL ||
-      ''
-    ).trim().replace(/\/$/, '');
+    // 4. Base return URLs (Must strictly be HTTPS for Mercado Pago auto_return to be valid)
+    let appUrl = '';
+    const envAppUrl = (process.env.APP_URL || process.env.VITE_APP_URL || '').trim().replace(/\/$/, '');
+    const origin = (req.headers.origin || '').trim().replace(/\/$/, '');
+    const host = (req.headers.host || '').trim().replace(/\/$/, '');
 
-    const appUrl = rawAppUrl.startsWith('http') ? rawAppUrl : 'https://ais-dev-xwg7la6zry2t4nlh34hemd-154142596752.us-east1.run.app';
+    if (envAppUrl.startsWith('https://')) {
+      appUrl = envAppUrl;
+    } else if (origin.startsWith('https://') && !origin.includes('localhost') && !origin.includes('127.0.0.1')) {
+      appUrl = origin;
+    } else if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+      appUrl = `https://${host}`;
+    } else {
+      appUrl = 'https://ais-dev-xwg7la6zry2t4nlh34hemd-154142596752.us-east1.run.app';
+    }
+
+    if (!appUrl.startsWith('https://')) {
+      appUrl = appUrl.replace(/^http:\/\//, 'https://');
+    }
 
     const backUrls = {
       success: `${appUrl}/pagamento/sucesso`,

@@ -316,6 +316,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     if (e) e.preventDefault();
     if (!validateCustomer()) return;
 
+    if (!items || items.length === 0) {
+      setFormError('Seu carrinho está vazio. Adicione ao menos um produto antes de prosseguir.');
+      return;
+    }
+
     setIsProcessing(true);
     setButtonState('processing');
     setFormError(null);
@@ -334,12 +339,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             cpf: cleanCpf,
           },
           items: items.map((i) => ({
-            id: i.pack.id,
-            title: i.pack.title,
+            id: i.pack?.id || 'pack_flyer_150_mega',
+            title: i.pack?.title || 'Produto MD Stúdio Play',
             quantity: i.quantity || 1,
-            unit_price: Number(i.pack.discountPrice ?? 57.99),
-            postSaleUrl: i.pack.postSaleUrl,
-            coverImage: i.pack.image,
+            unit_price: Number(i.pack?.discountPrice ?? 57.99),
+            postSaleUrl: i.pack?.postSaleUrl,
+            coverImage: i.pack?.image,
           })),
         }),
       });
